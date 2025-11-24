@@ -70,9 +70,6 @@ class HabitacionImagenFactory
 
     /**
      * Crear galería de imágenes para una habitación
-     *
-     * @param  Habitacion  $habitacion
-     * @return array
      */
     public static function crearGaleria(Habitacion $habitacion): array
     {
@@ -83,9 +80,6 @@ class HabitacionImagenFactory
 
     /**
      * Obtener imagen principal de una habitación
-     *
-     * @param  Habitacion  $habitacion
-     * @return string
      */
     public static function obtenerImagenPrincipal(Habitacion $habitacion): string
     {
@@ -96,9 +90,6 @@ class HabitacionImagenFactory
 
     /**
      * Obtener galería completa de imágenes
-     *
-     * @param  Habitacion  $habitacion
-     * @return array
      */
     public static function obtenerGaleriaCompleta(Habitacion $habitacion): array
     {
@@ -109,9 +100,6 @@ class HabitacionImagenFactory
 
     /**
      * Normalizar nombre del tipo de habitación
-     *
-     * @param  string  $tipoNombre
-     * @return string
      */
     private static function normalizarTipo(string $tipoNombre): string
     {
@@ -139,9 +127,6 @@ class HabitacionImagenFactory
 
     /**
      * Crear miniatura de imagen
-     *
-     * @param  string  $url
-     * @return string
      */
     public static function crearMiniatura(string $url): string
     {

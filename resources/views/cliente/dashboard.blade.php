@@ -103,8 +103,11 @@
                 <div class="row">
                     @forelse($habitacionesDisponibles as $habitacion)
                         <div class="col-md-6 col-lg-3">
-                            <div class="card mb-3 h-100">
-                                <img src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=400&h=250&fit=crop"
+                            <div class="card mb-3 h-100 shadow-sm">
+                                @php
+                                    $imagenPrincipal = \App\Patterns\Creational\HabitacionImagenFactory::obtenerImagenPrincipal($habitacion);
+                                @endphp
+                                <img src="{{ $imagenPrincipal }}"
                                      class="card-img-top"
                                      alt="Habitación {{ $habitacion->numero }}"
                                      style="height: 200px; object-fit: cover;">

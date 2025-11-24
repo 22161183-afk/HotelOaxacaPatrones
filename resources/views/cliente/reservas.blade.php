@@ -67,16 +67,21 @@
                             </td>
                             <td>
                                 @if($reserva->estado === 'pendiente')
-                                    <a href="{{ route('cliente.pagos.create', ['reserva_id' => $reserva->id]) }}" class="btn btn-sm btn-success me-1">
-                                        <i class="fas fa-credit-card"></i> Pagar
-                                    </a>
-                                    <form action="{{ route('cliente.reservas.cancelar', $reserva->id) }}" method="POST" style="display: inline-block;" onsubmit="return confirm('¿Estás seguro de cancelar esta reserva?');">
-                                        @csrf
-                                        @method('PUT')
-                                        <button type="submit" class="btn btn-sm btn-danger">
-                                            <i class="fas fa-times"></i> Cancelar
-                                        </button>
-                                    </form>
+                                    <div class="btn-group-vertical gap-1" role="group">
+                                        <a href="{{ route('cliente.reservas.edit', $reserva->id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-edit"></i> Editar
+                                        </a>
+                                        <a href="{{ route('cliente.pagos.create', ['reserva_id' => $reserva->id]) }}" class="btn btn-sm btn-success">
+                                            <i class="fas fa-credit-card"></i> Pagar
+                                        </a>
+                                        <form action="{{ route('cliente.reservas.cancelar', $reserva->id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de cancelar esta reserva?');">
+                                            @csrf
+                                            @method('PUT')
+                                            <button type="submit" class="btn btn-sm btn-danger w-100">
+                                                <i class="fas fa-times"></i> Cancelar
+                                            </button>
+                                        </form>
+                                    </div>
                                 @elseif($reserva->estado === 'confirmada')
                                     <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
                                 @elseif($reserva->estado === 'cancelada')

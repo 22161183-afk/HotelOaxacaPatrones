@@ -51,7 +51,7 @@ class ClienteDashboardController extends Controller
             ->take(5)
             ->get();
 
-        // Habitaciones disponibles para reservar
+        // Habitaciones disponibles para reservar (solo las que están en estado 'disponible')
         $habitacionesDisponibles = Habitacion::where('estado', 'disponible')
             ->with('tipoHabitacion')
             ->take(8)
@@ -102,14 +102,29 @@ class ClienteDashboardController extends Controller
         ]);
     }
 
-    public function habitaciones()
+    public function habitaciones(\Illuminate\Http\Request $request)
     {
-        $habitaciones = Habitacion::where('estado', 'disponible')
-            ->with('tipoHabitacion')
-            ->paginate(12);
+        // Usar el patrón Interpreter para búsqueda avanzada
+        $query = Habitacion::with('tipoHabitacion');
+
+        // Si hay parámetros de búsqueda, usar el Interpreter
+        if ($request->hasAny(['tipo', 'capacidad', 'precio_min', 'precio_max', 'piso', 'amenidades'])) {
+            $interpreter = \App\Patterns\Behavioral\HabitacionSearchInterpreter::fromRequest($request->all());
+            $query = $interpreter->interpret($query);
+        } else {
+            // Si no hay búsqueda, mostrar todas disponibles, reservadas y ocupadas
+            $query->whereIn('estado', ['disponible', 'reservada', 'ocupada'])
+                ->orderByRaw("FIELD(estado, 'disponible', 'reservada', 'ocupada')");
+        }
+
+        $habitaciones = $query->paginate(12)->withQueryString();
+
+        // Obtener tipos de habitación para el filtro
+        $tiposHabitacion = \App\Models\TipoHabitacion::all();
 
         return view('cliente.habitaciones', [
             'habitaciones' => $habitaciones,
+            'tiposHabitacion' => $tiposHabitacion,
         ]);
     }
 
@@ -213,6 +228,11 @@ class ClienteDashboardController extends Controller
             'estado' => 'pendiente',
         ]);
 
+        // Cambiar estado de la habitación a 'reservada' al crear la reserva
+        $habitacion->update([
+            'estado' => 'reservada',
+        ]);
+
         // Agregar servicios adicionales usando el patrón Decorator
         if (isset($validated['servicios']) && count($validated['servicios']) > 0) {
             $precioServicios = 0;
@@ -242,6 +262,137 @@ class ClienteDashboardController extends Controller
             ->with('success', '¡Reserva creada exitosamente! Total: $'.number_format($precioTotal, 2));
     }
 
+    public function editReserva($id)
+    {
+        $usuario = Auth::user();
+        $cliente = $usuario->cliente;
+
+        if (! $cliente) {
+            return redirect()
+                ->route('cliente.dashboard')
+                ->with('error', 'Cliente no encontrado');
+        }
+
+        $reserva = Reserva::where('id', $id)
+            ->where('cliente_id', $cliente->id)
+            ->with('habitacion.tipoHabitacion', 'servicios')
+            ->firstOrFail();
+
+        // Solo se pueden editar reservas pendientes
+        if ($reserva->estado !== 'pendiente') {
+            return redirect()
+                ->route('cliente.reservas.index')
+                ->with('error', 'Solo se pueden editar reservas pendientes');
+        }
+
+        // Obtener servicios disponibles
+        $serviciosDisponibles = \App\Models\Servicio::where('disponible', true)
+            ->orderBy('tipo')
+            ->orderBy('nombre')
+            ->get();
+
+        return view('cliente.reservas.edit', [
+            'reserva' => $reserva,
+            'habitacion' => $reserva->habitacion,
+            'serviciosDisponibles' => $serviciosDisponibles,
+        ]);
+    }
+
+    public function updateReserva(\Illuminate\Http\Request $request, $id)
+    {
+        $usuario = Auth::user();
+        $cliente = $usuario->cliente;
+
+        if (! $cliente) {
+            return redirect()
+                ->route('cliente.dashboard')
+                ->with('error', 'Cliente no encontrado');
+        }
+
+        $reserva = Reserva::where('id', $id)
+            ->where('cliente_id', $cliente->id)
+            ->with('habitacion')
+            ->firstOrFail();
+
+        // Solo se pueden editar reservas pendientes
+        if ($reserva->estado !== 'pendiente') {
+            return redirect()
+                ->route('cliente.reservas.index')
+                ->with('error', 'Solo se pueden editar reservas pendientes');
+        }
+
+        $validated = $request->validate([
+            'fecha_inicio' => 'required|date|after_or_equal:today',
+            'fecha_fin' => 'required|date|after:fecha_inicio',
+            'numero_huespedes' => 'required|integer|min:1',
+            'servicios' => 'nullable|array',
+            'servicios.*' => 'exists:servicios,id',
+        ]);
+
+        // Verificar que no haya conflictos con otras reservas
+        $conflicto = Reserva::where('habitacion_id', $reserva->habitacion_id)
+            ->where('id', '!=', $reserva->id) // Excluir la reserva actual
+            ->where(function ($query) use ($validated) {
+                $query->whereBetween('fecha_inicio', [$validated['fecha_inicio'], $validated['fecha_fin']])
+                    ->orWhereBetween('fecha_fin', [$validated['fecha_inicio'], $validated['fecha_fin']])
+                    ->orWhere(function ($q) use ($validated) {
+                        $q->where('fecha_inicio', '<=', $validated['fecha_inicio'])
+                            ->where('fecha_fin', '>=', $validated['fecha_fin']);
+                    });
+            })
+            ->whereIn('estado', ['pendiente', 'confirmada'])
+            ->exists();
+
+        if ($conflicto) {
+            return back()
+                ->withInput()
+                ->with('error', 'La habitación ya está reservada para estas fechas');
+        }
+
+        // Calcular nuevo precio total
+        $fechaInicio = new \DateTime($validated['fecha_inicio']);
+        $fechaFin = new \DateTime($validated['fecha_fin']);
+        $dias = $fechaInicio->diff($fechaFin)->days;
+        $precioHabitacion = $dias * $reserva->habitacion->precio_base;
+
+        // Actualizar reserva
+        $reserva->update([
+            'fecha_inicio' => $validated['fecha_inicio'],
+            'fecha_fin' => $validated['fecha_fin'],
+            'numero_huespedes' => $validated['numero_huespedes'],
+            'precio_total' => $precioHabitacion,
+            'precio_servicios' => 0,
+        ]);
+
+        // Sincronizar servicios (eliminar los antiguos y agregar los nuevos)
+        $reserva->servicios()->detach();
+
+        if (isset($validated['servicios']) && count($validated['servicios']) > 0) {
+            $precioServicios = 0;
+            foreach ($validated['servicios'] as $servicioId) {
+                $servicio = \App\Models\Servicio::find($servicioId);
+                if ($servicio) {
+                    $reserva->servicios()->attach($servicioId, [
+                        'cantidad' => 1,
+                        'precio_unitario' => $servicio->precio,
+                        'subtotal' => $servicio->precio,
+                    ]);
+                    $precioServicios += $servicio->precio;
+                }
+            }
+
+            // Actualizar precio total con servicios
+            $reserva->update([
+                'precio_servicios' => $precioServicios,
+                'precio_total' => $precioHabitacion + $precioServicios,
+            ]);
+        }
+
+        return redirect()
+            ->route('cliente.reservas.index')
+            ->with('success', 'Reserva actualizada exitosamente. Nuevo total: $'.number_format($reserva->precio_total, 2));
+    }
+
     public function cancelarReserva($id)
     {
         $usuario = Auth::user();
@@ -267,6 +418,11 @@ class ClienteDashboardController extends Controller
         $reserva->update([
             'estado' => 'cancelada',
             'fecha_cancelacion' => now(),
+        ]);
+
+        // Devolver la habitación a estado 'disponible' cuando se cancela la reserva
+        $reserva->habitacion->update([
+            'estado' => 'disponible',
         ]);
 
         return redirect()
