@@ -113,7 +113,7 @@ class Reserva extends Model
 
     public function calcularNoches()
     {
-        return $this->fecha_fin->diffInDays($this->fecha_inicio);
+        return abs($this->fecha_inicio->diffInDays($this->fecha_fin));
     }
 
     public function calcularPrecioServicios()
@@ -151,16 +151,133 @@ class Reserva extends Model
         return $clone;
     }
 
-    // Trait para usar el patrón State
-    private $stateInstance;
+    // ============================================================
+    // STATE PATTERN - Gestión de Estados
+    // ============================================================
 
-    public function setState($state): void
+    /**
+     * Obtener el contexto de estado de la reserva
+     */
+    public function stateContext(): \App\Patterns\Behavioral\ReservaContext
     {
-        $this->stateInstance = $state;
+        return new \App\Patterns\Behavioral\ReservaContext($this);
     }
 
-    public function getState()
+    /**
+     * Confirmar reserva usando State Pattern
+     */
+    public function confirmarReserva(): bool
     {
-        return $this->stateInstance;
+        $context = $this->stateContext();
+        $resultado = $context->confirmar();
+
+        if ($resultado) {
+            // Cambiar estado de habitación a reservada
+            $this->habitacion->update(['estado' => 'reservada']);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Cancelar reserva usando State Pattern
+     */
+    public function cancelarReserva(): bool
+    {
+        $context = $this->stateContext();
+        $resultado = $context->cancelar();
+
+        if ($resultado) {
+            // Liberar habitación
+            $this->habitacion->update(['estado' => 'disponible']);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Completar reserva usando State Pattern
+     */
+    public function completarReserva(): bool
+    {
+        $context = $this->stateContext();
+        $resultado = $context->completar();
+
+        if ($resultado) {
+            // Liberar habitación
+            $this->habitacion->update(['estado' => 'disponible']);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Verificar si la reserva puede ser modificada
+     */
+    public function puedeModificar(): bool
+    {
+        $context = $this->stateContext();
+
+        return $context->puedeModificar();
+    }
+
+    /**
+     * Obtener nombre del estado actual usando State Pattern
+     */
+    public function obtenerEstadoActual(): string
+    {
+        $context = $this->stateContext();
+
+        return $context->getEstadoActual();
+    }
+
+    // ============================================================
+    // PRICING STRATEGY PATTERN - Cálculo de Precios Dinámico
+    // ============================================================
+
+    /**
+     * Calcular precio usando estrategia específica
+     */
+    public function calcularPrecioConEstrategia(string $tipoEstrategia = 'normal'): float
+    {
+        $estrategia = match ($tipoEstrategia) {
+            'temporada' => new \App\Patterns\Behavioral\PrecioTemporada,
+            'fidelidad' => new \App\Patterns\Behavioral\PrecioFidelidad,
+            'ultima_hora' => new \App\Patterns\Behavioral\PrecioUltimaHora,
+            default => new \App\Patterns\Behavioral\PrecioNormal,
+        };
+
+        $calculador = new \App\Patterns\Behavioral\CalculadorPrecio($estrategia);
+
+        return $calculador->calcular($this->habitacion, $this->calcularNoches());
+    }
+
+    /**
+     * Detectar y aplicar la mejor estrategia de precio automáticamente
+     */
+    public function aplicarMejorEstrategia(): float
+    {
+        // Verificar si es cliente frecuente (más de 3 reservas)
+        $reservasCliente = self::where('cliente_id', $this->cliente_id)
+            ->where('estado', 'completada')
+            ->count();
+
+        if ($reservasCliente >= 3) {
+            return $this->calcularPrecioConEstrategia('fidelidad');
+        }
+
+        // Verificar si es última hora (menos de 3 días para la fecha)
+        $diasHastaReserva = now()->diffInDays($this->fecha_inicio);
+        if ($diasHastaReserva <= 3) {
+            return $this->calcularPrecioConEstrategia('ultima_hora');
+        }
+
+        // Verificar si es temporada alta (diciembre, semana santa, julio-agosto)
+        $mes = $this->fecha_inicio->month;
+        if (in_array($mes, [12, 7, 8])) {
+            return $this->calcularPrecioConEstrategia('temporada');
+        }
+
+        return $this->calcularPrecioConEstrategia('normal');
     }
 }

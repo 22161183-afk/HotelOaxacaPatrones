@@ -182,84 +182,43 @@ class ClienteDashboardController extends Controller
             'servicios.*' => 'exists:servicios,id',
         ]);
 
-        // Verificar disponibilidad de la habitación
-        $habitacion = Habitacion::findOrFail($validated['habitacion_id']);
+        // ============================================================
+        // FACADE PATTERN - Simplificar creación de reservas
+        // ============================================================
+        $facade = new \App\Patterns\Structural\ReservaFacade;
 
-        if ($habitacion->estado !== 'disponible') {
-            return back()
-                ->withInput()
-                ->with('error', 'La habitación no está disponible');
-        }
-
-        // Verificar que no haya conflictos con otras reservas
-        $conflicto = Reserva::where('habitacion_id', $validated['habitacion_id'])
-            ->where(function ($query) use ($validated) {
-                $query->whereBetween('fecha_inicio', [$validated['fecha_inicio'], $validated['fecha_fin']])
-                    ->orWhereBetween('fecha_fin', [$validated['fecha_inicio'], $validated['fecha_fin']])
-                    ->orWhere(function ($q) use ($validated) {
-                        $q->where('fecha_inicio', '<=', $validated['fecha_inicio'])
-                            ->where('fecha_fin', '>=', $validated['fecha_fin']);
-                    });
-            })
-            ->whereIn('estado', ['pendiente', 'confirmada'])
-            ->exists();
-
-        if ($conflicto) {
-            return back()
-                ->withInput()
-                ->with('error', 'La habitación ya está reservada para estas fechas');
-        }
-
-        // Calcular precio total de la habitación
-        $fechaInicio = new \DateTime($validated['fecha_inicio']);
-        $fechaFin = new \DateTime($validated['fecha_fin']);
-        $dias = $fechaInicio->diff($fechaFin)->days;
-        $precioHabitacion = $dias * $habitacion->precio_base;
-
-        // Crear reserva
-        $reserva = Reserva::create([
-            'cliente_id' => $cliente->id,
+        // Preparar datos para el Facade
+        $datosReserva = [
+            'cliente' => [
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre,
+                'email' => $cliente->email,
+            ],
             'habitacion_id' => $validated['habitacion_id'],
             'fecha_inicio' => $validated['fecha_inicio'],
             'fecha_fin' => $validated['fecha_fin'],
             'numero_huespedes' => $validated['numero_huespedes'],
-            'precio_total' => $precioHabitacion,
-            'precio_servicios' => 0,
-            'estado' => 'pendiente',
-        ]);
+            'servicios' => $validated['servicios'] ?? [],
+        ];
 
-        // Cambiar estado de la habitación a 'reservada' al crear la reserva
-        $habitacion->update([
-            'estado' => 'reservada',
-        ]);
+        // Usar el Facade para crear la reserva completa
+        $resultado = $facade->crearReservaCompleta($datosReserva);
 
-        // Agregar servicios adicionales usando el patrón Decorator
-        if (isset($validated['servicios']) && count($validated['servicios']) > 0) {
-            $precioServicios = 0;
-            foreach ($validated['servicios'] as $servicioId) {
-                $servicio = \App\Models\Servicio::find($servicioId);
-                if ($servicio) {
-                    $reserva->servicios()->attach($servicioId, [
-                        'cantidad' => 1,
-                        'precio_unitario' => $servicio->precio,
-                        'subtotal' => $servicio->precio,
-                    ]);
-                    $precioServicios += $servicio->precio;
-                }
-            }
-
-            // Actualizar precio total con servicios
-            $reserva->update([
-                'precio_servicios' => $precioServicios,
-                'precio_total' => $precioHabitacion + $precioServicios,
-            ]);
+        if (! $resultado['exito']) {
+            return back()
+                ->withInput()
+                ->with('error', $resultado['error']);
         }
 
-        $precioTotal = $reserva->precio_total;
+        $reserva = $resultado['reserva'];
+
+        // Aplicar estrategia de precio óptima automáticamente
+        $precioOptimizado = $reserva->aplicarMejorEstrategia();
+        $reserva->update(['precio_total' => $precioOptimizado]);
 
         return redirect()
             ->route('cliente.reservas.index')
-            ->with('success', '¡Reserva creada exitosamente! Total: $'.number_format($precioTotal, 2));
+            ->with('success', '¡Reserva creada exitosamente! Total: $'.number_format($reserva->precio_total, 2));
     }
 
     public function editReserva($id)

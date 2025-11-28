@@ -30,7 +30,6 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Habitación</th>
                         <th>Entrada</th>
                         <th>Salida</th>
@@ -43,9 +42,8 @@
                 <tbody>
                     @forelse($reservas as $reserva)
                         <tr>
-                            <td><strong>#{{ $reserva->id }}</strong></td>
                             <td>
-                                {{ $reserva->habitacion->numero }}<br>
+                                <strong>{{ $reserva->habitacion->numero }}</strong><br>
                                 <small class="text-muted">{{ $reserva->habitacion->tipoHabitacion->nombre }}</small>
                             </td>
                             <td>{{ $reserva->fecha_inicio->format('d/m/Y') }}</td>

@@ -19,16 +19,31 @@ class PagoService
             throw new \Exception('La reserva debe estar confirmada para procesar el pago');
         }
 
-        // Simular procesamiento de pago
-        $resultado = [
-            'exito' => true,
-            'transaccion_id' => 'TXN_'.uniqid(),
-            'referencia' => strtoupper($metodo->nombre).'_'.time(),
-            'mensaje' => 'Pago procesado exitosamente',
-        ];
+        // ============================================================
+        // ADAPTER PATTERN - Usar adaptador de pasarela según método
+        // ============================================================
+        $tipoPasarela = $this->determinarPasarela($metodo->tipo);
+        $adapter = \App\Patterns\Structural\Adapters\PasarelaPagoAdapterFactory::crear($tipoPasarela);
 
-        if (! $resultado['exito']) {
-            throw new \Exception($resultado['mensaje']);
+        // ============================================================
+        // STRATEGY PATTERN - Procesar pago según método
+        // ============================================================
+        $strategy = $this->obtenerEstrategiaPago($metodo->tipo);
+        $resultado = $strategy->procesar($reserva->precio_total, $datos);
+
+        // Simular procesamiento con el Adapter
+        $resultadoAdapter = $adapter->procesarPago(
+            $reserva->precio_total,
+            [
+                'numero' => $datos['numero_tarjeta'] ?? null,
+                'cvv' => $datos['cvv'] ?? null,
+                'expiracion' => $datos['expiracion'] ?? null,
+                'titular' => $datos['titular'] ?? $reserva->cliente->nombre,
+            ]
+        );
+
+        if (! $resultadoAdapter['exito']) {
+            throw new \Exception($resultadoAdapter['mensaje']);
         }
 
         // Registrar pago
@@ -37,8 +52,9 @@ class PagoService
             'metodo_pago_id' => $metodoPagoId,
             'monto' => $reserva->precio_total,
             'estado' => 'completado',
-            'transaccion_id' => $resultado['transaccion_id'],
-            'referencia' => $resultado['referencia'] ?? null,
+            'transaccion_id' => $resultadoAdapter['transaccion_id'],
+            'referencia' => $resultadoAdapter['referencia'] ?? strtoupper($metodo->nombre).'_'.time(),
+            'observaciones' => 'Procesado con '.$tipoPasarela.' usando Strategy y Adapter patterns',
         ]);
 
         // Actualizar estado de reserva
@@ -48,6 +64,34 @@ class PagoService
         event(new PagoRealizado($pago));
 
         return $pago;
+    }
+
+    /**
+     * Determinar qué pasarela usar según tipo de método
+     */
+    private function determinarPasarela(string $tipoMetodo): string
+    {
+        return match ($tipoMetodo) {
+            'tarjeta_credito' => 'stripe',
+            'tarjeta_debito' => 'stripe',
+            'transferencia' => 'mercadopago',
+            'efectivo' => 'paypal',
+            default => 'stripe',
+        };
+    }
+
+    /**
+     * Obtener estrategia de pago según tipo de método
+     */
+    private function obtenerEstrategiaPago(string $tipoMetodo): \App\Patterns\Behavioral\MetodoPagoStrategy
+    {
+        return match ($tipoMetodo) {
+            'tarjeta_credito' => new \App\Patterns\Behavioral\TarjetaCreditoStrategy,
+            'tarjeta_debito' => new \App\Patterns\Behavioral\TarjetaDebitoStrategy,
+            'transferencia' => new \App\Patterns\Behavioral\TransferenciaStrategy,
+            'efectivo' => new \App\Patterns\Behavioral\EfectivoStrategy,
+            default => new \App\Patterns\Behavioral\TarjetaCreditoStrategy,
+        };
     }
 
     public function procesarReembolso($pagoId, $razon = null)

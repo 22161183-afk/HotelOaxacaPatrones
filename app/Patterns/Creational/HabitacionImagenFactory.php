@@ -83,6 +83,11 @@ class HabitacionImagenFactory
      */
     public static function obtenerImagenPrincipal(Habitacion $habitacion): string
     {
+        // Si tiene imagen personalizada, usarla primero
+        if (! empty($habitacion->imagen_url)) {
+            return $habitacion->imagen_url;
+        }
+
         $galeria = self::crearGaleria($habitacion);
 
         return $galeria['principal'];

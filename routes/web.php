@@ -41,17 +41,35 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     Route::prefix('reservas')->name('reservas.')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'reservas'])->name('index');
+        Route::get('/{id}', [AdminDashboardController::class, 'showReserva'])->name('show');
+        Route::post('/{id}/confirmar', [AdminDashboardController::class, 'confirmarReservaCommand'])->name('confirmar');
+        Route::post('/{id}/cancelar', [AdminDashboardController::class, 'cancelarReservaCommand'])->name('cancelar');
+        Route::post('/{id}/cambiar-habitacion', [AdminDashboardController::class, 'cambiarHabitacionCommand'])->name('cambiar-habitacion');
     });
 
     Route::prefix('habitaciones')->name('habitaciones.')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'habitaciones'])->name('index');
+        Route::get('/crear', [AdminDashboardController::class, 'createHabitacion'])->name('create');
+        Route::post('/', [AdminDashboardController::class, 'storeHabitacion'])->name('store');
         Route::get('/{id}/edit', [AdminDashboardController::class, 'editHabitacion'])->name('edit');
         Route::put('/{id}', [AdminDashboardController::class, 'updateHabitacion'])->name('update');
+        Route::get('/{id}/clonar', [AdminDashboardController::class, 'showClonarForm'])->name('clonar.form');
+        Route::post('/{id}/clonar', [AdminDashboardController::class, 'clonarHabitacion'])->name('clonar');
     });
 
     Route::prefix('pagos')->name('pagos.')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'pagos'])->name('index');
     });
+
+    Route::prefix('metodos-pago')->name('metodos-pago.')->group(function () {
+        Route::get('/', [AdminDashboardController::class, 'metodosPago'])->name('index');
+        Route::get('/crear', [AdminDashboardController::class, 'createMetodoPago'])->name('create');
+        Route::post('/', [AdminDashboardController::class, 'storeMetodoPago'])->name('store');
+        Route::get('/{id}/edit', [AdminDashboardController::class, 'editMetodoPago'])->name('edit');
+        Route::put('/{id}', [AdminDashboardController::class, 'updateMetodoPago'])->name('update');
+    });
+
+    Route::get('/api-docs', [AdminDashboardController::class, 'apiDocumentation'])->name('api-docs');
 });
 
 // ============================================================

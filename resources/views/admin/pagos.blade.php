@@ -13,8 +13,8 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Reserva</th>
+                        <th>Cliente</th>
                         <th>Monto</th>
                         <th>Método</th>
                         <th>Transacción</th>
@@ -26,11 +26,17 @@
                 <tbody>
                     @forelse($pagos as $pago)
                         <tr>
-                            <td><strong>#{{ $pago->id }}</strong></td>
                             <td>
-                                <a href="/api/reservas/{{ $pago->reserva_id }}" target="_blank">
-                                    #{{ $pago->reserva_id }}
+                                <a href="{{ route('admin.reservas.show', $pago->reserva_id) }}">
+                                    <strong>Reserva #{{ $pago->reserva_id }}</strong>
                                 </a>
+                            </td>
+                            <td>
+                                @if($pago->reserva && $pago->reserva->cliente)
+                                    {{ $pago->reserva->cliente->nombre }} {{ $pago->reserva->cliente->apellido }}
+                                @else
+                                    <span class="text-muted">N/A</span>
+                                @endif
                             </td>
                             <td>
                                 <strong>${{ number_format($pago->monto, 2) }}</strong>
@@ -50,7 +56,7 @@
                             </td>
                             <td>{{ $pago->created_at->format('d/m/Y H:i') }}</td>
                             <td>
-                                <a href="/api/pagos/{{ $pago->id }}" class="btn btn-sm btn-primary" target="_blank">
+                                <a href="{{ route('admin.reservas.show', $pago->reserva_id) }}" class="btn btn-sm btn-primary" title="Ver detalles de la reserva">
                                     <i class="fas fa-eye"></i>
                                 </a>
                             </td>

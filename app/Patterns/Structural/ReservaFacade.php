@@ -60,8 +60,8 @@ class ReservaFacade
             // 6. Crear la reserva
             $reserva = $builder->build();
 
-            // 7. Actualizar estado de habitación
-            $habitacion->update(['estado' => 'ocupada']);
+            // 7. Actualizar estado de habitación (reservada al crear, ocupada al check-in)
+            $habitacion->update(['estado' => 'reservada']);
 
             // 8. Disparar evento
             event(new ReservaCreada($reserva));
@@ -221,6 +221,12 @@ class ReservaFacade
      */
     private function obtenerOCrearCliente(array $datosCliente): Cliente
     {
+        // Si se proporciona ID, buscar por ID
+        if (isset($datosCliente['id'])) {
+            return Cliente::findOrFail($datosCliente['id']);
+        }
+
+        // Si no, buscar por email o crear nuevo
         $cliente = Cliente::where('email', $datosCliente['email'])->first();
 
         if (! $cliente) {

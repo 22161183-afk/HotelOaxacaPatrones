@@ -1,8 +1,14 @@
 @extends('layouts.admin')
 
-@section('page-title', 'Dashboard')
+@section('page-title', 'Principal')
 
 @section('content')
+
+<!-- MENSAJE DE BIENVENIDA -->
+<div class="alert alert-info mb-4">
+    <h4><i class="fas fa-user-shield"></i> ¡Bienvenido, {{ Auth::user()->name }}!</h4>
+    <p class="mb-0">Panel de control administrativo del Hotel Oaxaca. Aquí puedes gestionar reservas, habitaciones, pagos y métodos de pago.</p>
+</div>
 
 <!-- ESTADÍSTICAS PRINCIPALES -->
 <div class="row">
@@ -143,8 +149,8 @@
                             <tr>
                                 <th>Habitación</th>
                                 <th>Cliente</th>
-                                <th>Check-in</th>
-                                <th>Check-out</th>
+                                <th>Entrada</th>
+                                <th>Salida</th>
                                 <th>Noches</th>
                                 <th>Total</th>
                                 <th>Estado</th>
@@ -172,7 +178,7 @@
                                         @endif
                                     </td>
                                     <td>
-                                        <a href="/api/reservas/{{ $reserva->id }}" class="btn btn-sm btn-primary" target="_blank">
+                                        <a href="{{ route('admin.reservas.show', $reserva->id) }}" class="btn btn-sm btn-primary" title="Ver detalles">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                     </td>

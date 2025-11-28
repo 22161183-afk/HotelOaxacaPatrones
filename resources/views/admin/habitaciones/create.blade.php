@@ -1,15 +1,15 @@
 @extends('layouts.admin')
 
-@section('page-title', 'Editar Habitación ' . $habitacion->numero)
+@section('page-title', 'Crear Nueva Habitación')
 
 @section('content')
 
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header bg-warning text-dark">
+            <div class="card-header bg-success text-white">
                 <h4 class="mb-0">
-                    <i class="fas fa-edit"></i> Editar Habitación {{ $habitacion->numero }}
+                    <i class="fas fa-plus"></i> Crear Nueva Habitación
                 </h4>
             </div>
             <div class="card-body">
@@ -19,9 +19,8 @@
                     </div>
                 @endif
 
-                <form action="{{ route('admin.habitaciones.update', $habitacion->id) }}" method="POST">
+                <form action="{{ route('admin.habitaciones.store') }}" method="POST">
                     @csrf
-                    @method('PUT')
 
                     <div class="row">
                         <div class="col-md-6">
@@ -32,7 +31,8 @@
                                     class="form-control @error('numero') is-invalid @enderror"
                                     id="numero"
                                     name="numero"
-                                    value="{{ old('numero', $habitacion->numero) }}"
+                                    value="{{ old('numero') }}"
+                                    placeholder="Ej: 101, 202, etc."
                                     required>
                                 @error('numero')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -50,9 +50,7 @@
                                     required>
                                     <option value="">Seleccione un tipo</option>
                                     @foreach($tiposHabitacion as $tipo)
-                                        <option
-                                            value="{{ $tipo->id }}"
-                                            {{ old('tipo_habitacion_id', $habitacion->tipo_habitacion_id) == $tipo->id ? 'selected' : '' }}>
+                                        <option value="{{ $tipo->id }}" {{ old('tipo_habitacion_id') == $tipo->id ? 'selected' : '' }}>
                                             {{ $tipo->nombre }}
                                         </option>
                                     @endforeach
@@ -73,7 +71,8 @@
                                     class="form-control @error('piso') is-invalid @enderror"
                                     id="piso"
                                     name="piso"
-                                    value="{{ old('piso', $habitacion->piso) }}"
+                                    value="{{ old('piso', 1) }}"
+                                    min="1"
                                     required>
                                 @error('piso')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -89,7 +88,7 @@
                                     class="form-control @error('capacidad') is-invalid @enderror"
                                     id="capacidad"
                                     name="capacidad"
-                                    value="{{ old('capacidad', $habitacion->capacidad) }}"
+                                    value="{{ old('capacidad', 2) }}"
                                     min="1"
                                     required>
                                 @error('capacidad')
@@ -108,9 +107,10 @@
                                         class="form-control @error('precio_base') is-invalid @enderror"
                                         id="precio_base"
                                         name="precio_base"
-                                        value="{{ old('precio_base', $habitacion->precio_base) }}"
+                                        value="{{ old('precio_base') }}"
                                         step="0.01"
                                         min="0"
+                                        placeholder="0.00"
                                         required>
                                     @error('precio_base')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -129,9 +129,10 @@
                                     id="estado"
                                     name="estado"
                                     required>
-                                    <option value="disponible" {{ old('estado', $habitacion->estado) === 'disponible' ? 'selected' : '' }}>Disponible</option>
-                                    <option value="ocupada" {{ old('estado', $habitacion->estado) === 'ocupada' ? 'selected' : '' }}>Ocupada</option>
-                                    <option value="mantenimiento" {{ old('estado', $habitacion->estado) === 'mantenimiento' ? 'selected' : '' }}>Mantenimiento</option>
+                                    <option value="disponible" {{ old('estado') === 'disponible' ? 'selected' : 'selected' }}>Disponible</option>
+                                    <option value="reservada" {{ old('estado') === 'reservada' ? 'selected' : '' }}>Reservada</option>
+                                    <option value="ocupada" {{ old('estado') === 'ocupada' ? 'selected' : '' }}>Ocupada</option>
+                                    <option value="mantenimiento" {{ old('estado') === 'mantenimiento' ? 'selected' : '' }}>Mantenimiento</option>
                                 </select>
                                 @error('estado')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -148,7 +149,8 @@
                                     class="form-control @error('descripcion') is-invalid @enderror"
                                     id="descripcion"
                                     name="descripcion"
-                                    rows="3">{{ old('descripcion', $habitacion->descripcion) }}</textarea>
+                                    rows="3"
+                                    placeholder="Descripción detallada de la habitación...">{{ old('descripcion') }}</textarea>
                                 @error('descripcion')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
@@ -165,7 +167,7 @@
                                     class="form-control @error('amenidades') is-invalid @enderror"
                                     id="amenidades"
                                     name="amenidades"
-                                    value="{{ old('amenidades', is_array($habitacion->amenidades) ? implode(', ', $habitacion->amenidades) : '') }}"
+                                    value="{{ old('amenidades') }}"
                                     placeholder="Ejemplo: WiFi, TV, Aire Acondicionado (separadas por comas)">
                                 <small class="form-text text-muted">Separe las amenidades con comas</small>
                                 @error('amenidades')
@@ -187,7 +189,7 @@
                                     class="form-control @error('imagen_url') is-invalid @enderror"
                                     id="imagen_url"
                                     name="imagen_url"
-                                    value="{{ old('imagen_url', $habitacion->imagen_url) }}"
+                                    value="{{ old('imagen_url') }}"
                                     placeholder="https://ejemplo.com/imagen.jpg">
                                 <small class="form-text text-muted">
                                     <i class="fas fa-info-circle"></i> Si no se proporciona, se usará el <strong>Patrón Factory</strong> para generar imágenes automáticamente según el tipo de habitación.
@@ -201,7 +203,7 @@
 
                     <div class="mt-4">
                         <button type="submit" class="btn btn-success">
-                            <i class="fas fa-save"></i> Guardar Cambios
+                            <i class="fas fa-save"></i> Crear Habitación
                         </button>
                         <a href="{{ route('admin.habitaciones.index') }}" class="btn btn-secondary">
                             <i class="fas fa-times"></i> Cancelar
