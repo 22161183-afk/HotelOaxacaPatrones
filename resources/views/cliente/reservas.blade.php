@@ -60,7 +60,7 @@
                                 @elseif($reserva->estado === 'cancelada')
                                     <span class="badge bg-danger">Cancelada</span>
                                 @else
-                                    <span class="badge bg-secondary">{{ ucfirst($reserva->estado) }}</span>
+                                    <span class="badge bg-secondary">{{ $reserva->estado_formateado }}</span>
                                 @endif
                             </td>
                             <td>
@@ -84,6 +84,16 @@
                                     <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
                                 @elseif($reserva->estado === 'cancelada')
                                     <span class="badge bg-danger"><i class="fas fa-ban"></i> Cancelada</span>
+                                @elseif($reserva->estado === 'en_proceso_reembolso')
+                                    <form action="{{ route('cliente.reservas.aceptar-reembolso', $reserva->id) }}" method="POST">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-primary"
+                                                onclick="return confirm('¿Aceptar reembolso de ${{ number_format($reserva->monto_reembolso, 2) }}? El dinero se procesará en 3-5 días hábiles.')">
+                                            <i class="fas fa-check"></i> Aceptar Reembolso
+                                        </button>
+                                    </form>
+                                @elseif($reserva->estado === 'reembolsado')
+                                    <span class="badge bg-info"><i class="fas fa-undo"></i> Reembolsado</span>
                                 @else
                                     <span class="badge bg-secondary">-</span>
                                 @endif
@@ -98,10 +108,32 @@
             </table>
         </div>
 
-        <!-- PAGINACIÓN -->
+        <!-- PAGINACIÓN PERSONALIZADA -->
         @if($reservas->hasPages())
-            <div class="d-flex justify-content-center mt-4">
-                {{ $reservas->links() }}
+            <div class="mt-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <!-- Botones de navegación -->
+                    <div>
+                        @if($reservas->onFirstPage())
+                            <span class="text-muted">« Volver</span>
+                        @else
+                            <a href="{{ $reservas->previousPageUrl() }}" class="text-decoration-none">« Volver</a>
+                        @endif
+
+                        <span class="mx-3">|</span>
+
+                        @if($reservas->hasMorePages())
+                            <a href="{{ $reservas->nextPageUrl() }}" class="text-decoration-none">Siguiente »</a>
+                        @else
+                            <span class="text-muted">Siguiente »</span>
+                        @endif
+                    </div>
+
+                    <!-- Información de resultados -->
+                    <div class="text-muted small">
+                        Mostrando {{ $reservas->firstItem() ?? 0 }} a {{ $reservas->lastItem() ?? 0 }} de {{ $reservas->total() }} resultados
+                    </div>
+                </div>
             </div>
         @endif
     </div>
@@ -117,7 +149,9 @@
                     <li><span class="badge bg-warning">Pendiente</span> - Reserva creada, pendiente de pago</li>
                     <li><span class="badge bg-success">Confirmada</span> - Pago recibido, reserva confirmada</li>
                     <li><span class="badge bg-info">Completada</span> - Estancia finalizada</li>
-                    <li><span class="badge bg-danger">Cancelada</span> - Reserva cancelada</li>
+                    <li><span class="badge bg-danger"><i class="fas fa-ban"></i> Cancelada</span> - Reserva cancelada</li>
+                    <li><span class="badge bg-secondary"><i class="fas fa-exclamation-triangle"></i> En Proceso de Reembolso</span> - Cancelada por admin, pendiente de aceptar reembolso</li>
+                    <li><span class="badge bg-info"><i class="fas fa-undo"></i> Reembolsado</span> - Reembolso aceptado, en proceso de devolución</li>
                 </ul>
             </div>
         </div>

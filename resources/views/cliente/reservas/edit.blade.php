@@ -200,6 +200,13 @@
     </div>
 </div>
 
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+<!-- Flatpickr JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
 <script>
     const precioPorNoche = {{ $habitacion->precio_base }};
 
@@ -207,11 +214,15 @@
         const fechaInicio = document.getElementById('fecha_inicio').value;
         const fechaFin = document.getElementById('fecha_fin').value;
 
+        console.log('Calculando precio - Inicio:', fechaInicio, 'Fin:', fechaFin);
+
         if (fechaInicio && fechaFin) {
-            const inicio = new Date(fechaInicio);
-            const fin = new Date(fechaFin);
+            const inicio = new Date(fechaInicio + 'T00:00:00');
+            const fin = new Date(fechaFin + 'T00:00:00');
             const diferencia = fin - inicio;
             const dias = Math.ceil(diferencia / (1000 * 60 * 60 * 24));
+
+            console.log('Días calculados:', dias);
 
             if (dias > 0) {
                 const precioHabitacion = dias * precioPorNoche;
@@ -227,6 +238,8 @@
                 document.getElementById('totalNoches').textContent = dias;
                 document.getElementById('precioServicios').textContent = precioServicios.toFixed(2);
                 document.getElementById('precioTotal').textContent = total.toFixed(2);
+
+                console.log('Precio calculado - Total:', total);
             } else {
                 document.getElementById('totalNoches').textContent = '-';
                 document.getElementById('precioServicios').textContent = '0.00';
@@ -235,8 +248,65 @@
         }
     }
 
-    // Calcular al cargar si hay fechas
-    document.addEventListener('DOMContentLoaded', calcularPrecio);
+    // Configurar Flatpickr en español
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Inicializando Flatpickr...');
+
+        // Fecha de inicio
+        const fechaInicioInput = document.getElementById('fecha_inicio');
+        const fpInicio = flatpickr(fechaInicioInput, {
+            locale: "es",
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            defaultDate: fechaInicioInput.value,
+            onChange: function(selectedDates, dateStr, instance) {
+                console.log('Fecha inicio cambiada:', dateStr);
+                calcularPrecio();
+
+                // Actualizar fecha mínima de fecha_fin
+                if (selectedDates.length > 0) {
+                    const minDateFin = new Date(selectedDates[0]);
+                    minDateFin.setDate(minDateFin.getDate() + 1);
+                    fpFin.set('minDate', minDateFin);
+                }
+            }
+        });
+
+        // Fecha de fin
+        const fechaFinInput = document.getElementById('fecha_fin');
+        const fechaInicioValue = fechaInicioInput.value;
+        let minDateFin = new Date();
+        minDateFin.setDate(minDateFin.getDate() + 1);
+
+        if (fechaInicioValue) {
+            const inicioDate = new Date(fechaInicioValue + 'T00:00:00');
+            minDateFin = new Date(inicioDate);
+            minDateFin.setDate(minDateFin.getDate() + 1);
+        }
+
+        const fpFin = flatpickr(fechaFinInput, {
+            locale: "es",
+            dateFormat: "Y-m-d",
+            minDate: minDateFin,
+            defaultDate: fechaFinInput.value,
+            onChange: function(selectedDates, dateStr, instance) {
+                console.log('Fecha fin cambiada:', dateStr);
+                calcularPrecio();
+            }
+        });
+
+        // Agregar eventos a los checkboxes de servicios
+        document.querySelectorAll('.servicio-check').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                console.log('Servicio cambiado');
+                calcularPrecio();
+            });
+        });
+
+        // Calcular al cargar con valores existentes
+        console.log('Calculando precio inicial...');
+        calcularPrecio();
+    });
 </script>
 
 @endsection

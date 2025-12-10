@@ -70,10 +70,32 @@
             </table>
         </div>
 
-        <!-- PAGINACIÓN -->
+        <!-- PAGINACIÓN PERSONALIZADA -->
         @if($pagos->hasPages())
-            <div class="d-flex justify-content-center mt-4">
-                {{ $pagos->links() }}
+            <div class="mt-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <!-- Botones de navegación -->
+                    <div>
+                        @if($pagos->onFirstPage())
+                            <span class="text-muted">« Volver</span>
+                        @else
+                            <a href="{{ $pagos->previousPageUrl() }}" class="text-decoration-none">« Volver</a>
+                        @endif
+
+                        <span class="mx-3">|</span>
+
+                        @if($pagos->hasMorePages())
+                            <a href="{{ $pagos->nextPageUrl() }}" class="text-decoration-none">Siguiente »</a>
+                        @else
+                            <span class="text-muted">Siguiente »</span>
+                        @endif
+                    </div>
+
+                    <!-- Información de resultados -->
+                    <div class="text-muted small">
+                        Mostrando {{ $pagos->firstItem() ?? 0 }} a {{ $pagos->lastItem() ?? 0 }} de {{ $pagos->total() }} resultados
+                    </div>
+                </div>
             </div>
         @endif
     </div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Cliente;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cliente;
 use App\Models\Habitacion;
 use App\Models\Reserva;
 use Illuminate\Support\Facades\Auth;
@@ -54,24 +55,37 @@ class ClienteDashboardController extends Controller
         // Habitaciones disponibles para reservar (solo las que están en estado 'disponible')
         $habitacionesDisponibles = Habitacion::where('estado', 'disponible')
             ->with('tipoHabitacion')
+            ->orderByRaw('CAST(numero AS UNSIGNED)')
             ->take(8)
             ->get();
 
         // Estadísticas del cliente
-        $totalReservas = Reserva::where('cliente_id', $cliente->id)->count();
+        $totalReservas = Reserva::where('cliente_id', $cliente->id)
+            ->whereIn('estado', ['confirmada', 'completada'])
+            ->count();
         $totalGastado = Reserva::where('cliente_id', $cliente->id)
-            ->where('estado', 'completada')
+            ->whereIn('estado', ['confirmada', 'completada'])
             ->sum('precio_total');
 
-        return view('cliente.dashboard', [
-            'cliente' => $cliente,
-            'reservasActivas' => $reservasActivas,
-            'reservasPasadas' => $reservasPasadas,
-            'reservasCanceladas' => $reservasCanceladas,
-            'habitacionesDisponibles' => $habitacionesDisponibles,
-            'totalReservas' => $totalReservas,
-            'totalGastado' => $totalGastado,
-        ]);
+        // Calcular total reembolsado (solo cuando el cliente ya aceptó el reembolso)
+        $totalReembolsado = Reserva::where('cliente_id', $cliente->id)
+            ->where('estado', 'reembolsado')
+            ->sum('monto_reembolso');
+
+        return response()
+            ->view('cliente.dashboard', [
+                'cliente' => $cliente,
+                'reservasActivas' => $reservasActivas,
+                'reservasPasadas' => $reservasPasadas,
+                'reservasCanceladas' => $reservasCanceladas,
+                'habitacionesDisponibles' => $habitacionesDisponibles,
+                'totalReservas' => $totalReservas,
+                'totalGastado' => $totalGastado,
+                'totalReembolsado' => $totalReembolsado,
+            ])
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 
     public function reservas()
@@ -114,7 +128,7 @@ class ClienteDashboardController extends Controller
         } else {
             // Si no hay búsqueda, mostrar todas disponibles, reservadas y ocupadas
             $query->whereIn('estado', ['disponible', 'reservada', 'ocupada'])
-                ->orderByRaw("FIELD(estado, 'disponible', 'reservada', 'ocupada')");
+                ->orderByRaw('CAST(numero AS UNSIGNED)');
         }
 
         $habitaciones = $query->paginate(12)->withQueryString();
@@ -212,13 +226,33 @@ class ClienteDashboardController extends Controller
 
         $reserva = $resultado['reserva'];
 
+        // Refrescar y cargar relaciones necesarias
+        $reserva->refresh();
+        $reserva->load(['habitacion', 'cliente', 'servicios']);
+
         // Aplicar estrategia de precio óptima automáticamente
         $precioOptimizado = $reserva->aplicarMejorEstrategia();
-        $reserva->update(['precio_total' => $precioOptimizado]);
+
+        \Log::info("Precio optimizado calculado: {$precioOptimizado} para reserva #{$reserva->id}");
+
+        // Actualizar el precio total (incluyendo servicios)
+        $precioTotal = $precioOptimizado + $reserva->precio_servicios;
+        $reserva->update(['precio_total' => $precioTotal]);
+
+        // Refrescar para obtener el valor actualizado
+        $reserva->refresh();
+
+        \Log::info("Precio total guardado: {$reserva->precio_total} para reserva #{$reserva->id}");
 
         return redirect()
             ->route('cliente.reservas.index')
-            ->with('success', '¡Reserva creada exitosamente! Total: $'.number_format($reserva->precio_total, 2));
+            ->with('success', '¡Reserva creada exitosamente! Total: $'.number_format($reserva->precio_total, 2))
+            ->with('email_notification', [
+                'title' => 'Confirmación de Reserva Enviada',
+                'message' => 'Se ha enviado un correo de confirmación con los detalles de tu reserva.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
     }
 
     public function editReserva($id)
@@ -349,7 +383,13 @@ class ClienteDashboardController extends Controller
 
         return redirect()
             ->route('cliente.reservas.index')
-            ->with('success', 'Reserva actualizada exitosamente. Nuevo total: $'.number_format($reserva->precio_total, 2));
+            ->with('success', 'Reserva actualizada exitosamente. Nuevo total: $'.number_format($reserva->precio_total, 2))
+            ->with('email_notification', [
+                'title' => 'Modificación de Reserva Confirmada',
+                'message' => 'Se ha enviado un correo confirmando los cambios en tu reserva.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
     }
 
     public function cancelarReserva($id)
@@ -386,7 +426,13 @@ class ClienteDashboardController extends Controller
 
         return redirect()
             ->route('cliente.reservas.index')
-            ->with('success', 'Reserva cancelada exitosamente');
+            ->with('success', 'Reserva cancelada exitosamente')
+            ->with('email_notification', [
+                'title' => 'Cancelación de Reserva Confirmada',
+                'message' => 'Se ha enviado un correo confirmando la cancelación de tu reserva.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
     }
 
     public function createPago(\Illuminate\Http\Request $request)
@@ -466,6 +512,63 @@ class ClienteDashboardController extends Controller
 
         return redirect()
             ->route('cliente.reservas.index')
-            ->with('success', '¡Pago realizado exitosamente! Reserva confirmada.');
+            ->with('success', '¡Pago realizado exitosamente! Reserva confirmada.')
+            ->with('email_notification', [
+                'title' => 'Pago Recibido y Confirmado',
+                'message' => 'Se ha enviado un comprobante de pago y confirmación de tu reserva.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
+    }
+
+    /**
+     * Aceptar reembolso
+     */
+    public function aceptarReembolso($id)
+    {
+        $cliente = Cliente::where('usuario_id', auth()->id())->firstOrFail();
+        $reserva = Reserva::where('id', $id)
+            ->where('cliente_id', $cliente->id)
+            ->where('estado', 'en_proceso_reembolso')
+            ->firstOrFail();
+
+        // Marcar como reembolsado
+        $reserva->update([
+            'estado' => 'reembolsado',
+            'fecha_reembolso' => now(),
+        ]);
+
+        return redirect()
+            ->route('cliente.reservas.index')
+            ->with('success', 'Reembolso aceptado. El monto de $'.number_format($reserva->monto_reembolso, 2).' será procesado en los próximos días.')
+            ->with('email_notification', [
+                'title' => 'Reembolso Aceptado',
+                'message' => 'Has aceptado el reembolso de $'.number_format($reserva->monto_reembolso, 2).'. El dinero será procesado en 3-5 días hábiles.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
+    }
+
+    /**
+     * Actualizar perfil del cliente
+     */
+    public function updatePerfil(\Illuminate\Http\Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:usuarios,email,'.auth()->id(),
+        ], [
+            'name.required' => 'El nombre es obligatorio',
+            'email.required' => 'El email es obligatorio',
+            'email.email' => 'El email debe ser válido',
+            'email.unique' => 'Este email ya está en uso',
+        ]);
+
+        $usuario = auth()->user();
+        $usuario->update($validated);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Perfil actualizado correctamente');
     }
 }

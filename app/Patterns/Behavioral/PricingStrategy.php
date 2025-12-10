@@ -115,3 +115,36 @@ class PricingContext
         return $this->strategy->calcular($precioBase, $reserva);
     }
 }
+
+/**
+ * Calculador de Precio (alias para mantener compatibilidad)
+ */
+class CalculadorPrecio
+{
+    private PricingStrategy $strategy;
+
+    public function __construct(PricingStrategy $strategy)
+    {
+        $this->strategy = $strategy;
+    }
+
+    public function setStrategy(PricingStrategy $strategy): void
+    {
+        $this->strategy = $strategy;
+    }
+
+    public function calcular($habitacion, $noches, $reserva = null): float
+    {
+        // Si no se proporciona una reserva, crear una temporal básica
+        if ($reserva === null) {
+            $precioBase = $habitacion->precio_base ?? $habitacion->precio_noche ?? 0;
+
+            return $precioBase * $noches;
+        }
+
+        // Usar la reserva proporcionada
+        $precioBase = $habitacion->precio_base ?? $habitacion->precio_noche ?? 0;
+
+        return $this->strategy->calcular($precioBase, $reserva);
+    }
+}

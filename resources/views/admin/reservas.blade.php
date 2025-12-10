@@ -20,6 +20,8 @@
                         <option value="confirmada" {{ request('estado') === 'confirmada' ? 'selected' : '' }}>Confirmada</option>
                         <option value="completada" {{ request('estado') === 'completada' ? 'selected' : '' }}>Completada</option>
                         <option value="cancelada" {{ request('estado') === 'cancelada' ? 'selected' : '' }}>Cancelada</option>
+                        <option value="en_proceso_reembolso" {{ request('estado') === 'en_proceso_reembolso' ? 'selected' : '' }}>Reembolso Pendiente</option>
+                        <option value="reembolsado" {{ request('estado') === 'reembolsado' ? 'selected' : '' }}>Reembolsado</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -102,8 +104,14 @@
                                     <span class="badge bg-warning">Pendiente</span>
                                 @elseif($reserva->estado === 'completada')
                                     <span class="badge bg-info">Pagada</span>
+                                @elseif($reserva->estado === 'cancelada')
+                                    <span class="badge bg-danger">Cancelada</span>
+                                @elseif($reserva->estado === 'en_proceso_reembolso')
+                                    <span class="badge bg-secondary"><i class="fas fa-exclamation-triangle"></i> En Proceso de Reembolso</span>
+                                @elseif($reserva->estado === 'reembolsado')
+                                    <span class="badge bg-info"><i class="fas fa-undo"></i> Reembolsado</span>
                                 @else
-                                    <span class="badge bg-secondary">{{ ucfirst($reserva->estado) }}</span>
+                                    <span class="badge bg-secondary">{{ $reserva->estado_formateado }}</span>
                                 @endif
                             </td>
                             <td>
@@ -121,10 +129,32 @@
             </table>
         </div>
 
-        <!-- PAGINACIÓN -->
+        <!-- PAGINACIÓN PERSONALIZADA -->
         @if($reservas->hasPages())
-            <div class="d-flex justify-content-center mt-4">
-                {{ $reservas->links() }}
+            <div class="mt-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <!-- Botones de navegación -->
+                    <div>
+                        @if($reservas->onFirstPage())
+                            <span class="text-muted">« Volver</span>
+                        @else
+                            <a href="{{ $reservas->previousPageUrl() }}" class="text-decoration-none">« Volver</a>
+                        @endif
+
+                        <span class="mx-3">|</span>
+
+                        @if($reservas->hasMorePages())
+                            <a href="{{ $reservas->nextPageUrl() }}" class="text-decoration-none">Siguiente »</a>
+                        @else
+                            <span class="text-muted">Siguiente »</span>
+                        @endif
+                    </div>
+
+                    <!-- Información de resultados -->
+                    <div class="text-muted small">
+                        Mostrando {{ $reservas->firstItem() ?? 0 }} a {{ $reservas->lastItem() ?? 0 }} de {{ $reservas->total() }} resultados
+                    </div>
+                </div>
             </div>
         @endif
     </div>

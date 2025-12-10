@@ -38,10 +38,17 @@
                                 <span class="badge bg-info">Completada</span>
                             @elseif($reserva->estado === 'cancelada')
                                 <span class="badge bg-danger">Cancelada</span>
+                            @elseif($reserva->estado === 'en_proceso_reembolso')
+                                <span class="badge bg-secondary"><i class="fas fa-exclamation-triangle"></i> En Proceso de Reembolso</span>
+                            @elseif($reserva->estado === 'reembolsado')
+                                <span class="badge bg-info"><i class="fas fa-undo"></i> Reembolsado</span>
                             @else
-                                <span class="badge bg-secondary">{{ ucfirst($reserva->estado) }}</span>
+                                <span class="badge bg-secondary">{{ $reserva->estado_formateado }}</span>
                             @endif
                         </p>
+                        @if(in_array($reserva->estado, ['en_proceso_reembolso', 'reembolsado']))
+                            <p><strong><i class="fas fa-undo"></i> Monto de Reembolso:</strong> ${{ number_format($reserva->monto_reembolso, 2) }}</p>
+                        @endif
                     </div>
                 </div>
 
@@ -202,6 +209,18 @@
                             <p class="mb-0">{{ $reserva->fecha_cancelacion->format('d/m/Y H:i') }}</p>
                         </div>
                     @endif
+                    @if($reserva->fecha_solicitud_reembolso)
+                        <div class="mb-3">
+                            <small class="text-muted">Reembolso Solicitado</small>
+                            <p class="mb-0">{{ $reserva->fecha_solicitud_reembolso->format('d/m/Y H:i') }}</p>
+                        </div>
+                    @endif
+                    @if($reserva->fecha_reembolso)
+                        <div class="mb-3">
+                            <small class="text-muted">Reembolso Aceptado</small>
+                            <p class="mb-0">{{ $reserva->fecha_reembolso->format('d/m/Y H:i') }}</p>
+                        </div>
+                    @endif
                     <div>
                         <small class="text-muted">Última actualización</small>
                         <p class="mb-0">{{ $reserva->updated_at->format('d/m/Y H:i') }}</p>
@@ -210,10 +229,10 @@
             </div>
         </div>
 
-        <!-- CARD DE ACCIONES (Command Pattern) -->
+        <!-- CARD DE ACCIONES -->
         <div class="card mt-3">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-cogs"></i> Acciones (Command Pattern)</h5>
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Acciones</h5>
             </div>
             <div class="card-body">
                 @if($reserva->estado === 'pendiente')

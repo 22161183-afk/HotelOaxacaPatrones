@@ -240,6 +240,11 @@
             color: var(--success-color);
             font-size: 10px;
             margin-right: 6px;
+        }
+
+        .user-info a:hover span {
+            text-decoration: underline;
+            color: var(--secondary-color) !important;
             animation: blink 2s ease-in-out infinite;
         }
 
@@ -574,7 +579,9 @@
             <h1>@yield('page-title', 'Principal')</h1>
             <div class="user-info">
                 <span class="cliente-badge">CLIENTE</span>
-                <span><i class="fas fa-circle" style="color: #27ae60; font-size: 8px;"></i> {{ Auth::user()->name }}</span>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#perfilModal" class="text-white text-decoration-none" title="Ver mi perfil">
+                    <span><i class="fas fa-circle" style="color: #27ae60; font-size: 8px;"></i> {{ Auth::user()->name }}</span>
+                </a>
                 <form method="POST" action="{{ route('auth.logout') }}" style="display: inline;">
                     @csrf
                     <button type="submit" class="btn btn-sm btn-danger" title="Cerrar sesión">
@@ -587,9 +594,53 @@
         <!-- CONTENIDO -->
         @yield('content')
 
+        <!-- NOTIFICACIÓN DE CORREO -->
+        @include('components.email-notification')
+
         <!-- FOOTER -->
         <div class="footer">
             <p>&copy; 2025 Hotel Oaxaca - Portal del Cliente. Bienvenido!</p>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERFIL -->
+    <div class="modal fade" id="perfilModal" tabindex="-1" aria-labelledby="perfilModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="perfilModalLabel">
+                        <i class="fas fa-user-circle"></i> Mi Perfil
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <form method="POST" action="{{ route('cliente.perfil.update') }}">
+                    @csrf
+                    @method('PUT')
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-user"></i> Nombre Completo</label>
+                            <input type="text" name="name" class="form-control" value="{{ old('name', Auth::user()->name) }}" required placeholder="Juan Pérez">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-envelope"></i> Correo Electrónico</label>
+                            <input type="email" name="email" class="form-control" value="{{ old('email', Auth::user()->email) }}" required placeholder="correo@ejemplo.com">
+                        </div>
+
+                        <div class="alert alert-info small mb-0">
+                            <i class="fas fa-info-circle"></i> Esta información se utiliza para gestionar tu cuenta y reservas.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 

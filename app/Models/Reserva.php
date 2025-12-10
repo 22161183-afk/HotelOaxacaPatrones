@@ -25,6 +25,10 @@ class Reserva extends Model
         'observaciones',
         'fecha_confirmacion',
         'fecha_cancelacion',
+        'monto_reembolso',
+        'fecha_solicitud_reembolso',
+        'fecha_reembolso',
+        'motivo_reembolso',
     ];
 
     protected $casts = [
@@ -32,8 +36,11 @@ class Reserva extends Model
         'fecha_fin' => 'date',
         'fecha_confirmacion' => 'datetime',
         'fecha_cancelacion' => 'datetime',
+        'fecha_solicitud_reembolso' => 'datetime',
+        'fecha_reembolso' => 'datetime',
         'precio_total' => 'decimal:2',
         'precio_servicios' => 'decimal:2',
+        'monto_reembolso' => 'decimal:2',
     ];
 
     public function cliente(): BelongsTo
@@ -249,7 +256,7 @@ class Reserva extends Model
 
         $calculador = new \App\Patterns\Behavioral\CalculadorPrecio($estrategia);
 
-        return $calculador->calcular($this->habitacion, $this->calcularNoches());
+        return $calculador->calcular($this->habitacion, $this->calcularNoches(), $this);
     }
 
     /**
@@ -279,5 +286,25 @@ class Reserva extends Model
         }
 
         return $this->calcularPrecioConEstrategia('normal');
+    }
+
+    // ============================================================
+    // ACCESSOR - Formatear estado para mostrar
+    // ============================================================
+
+    /**
+     * Obtener el estado formateado para mostrar en vistas
+     */
+    public function getEstadoFormateadoAttribute(): string
+    {
+        return match ($this->estado) {
+            'pendiente' => 'Pendiente',
+            'confirmada' => 'Confirmada',
+            'cancelada' => 'Cancelada',
+            'completada' => 'Completada',
+            'en_proceso_reembolso' => 'En Proceso de Reembolso',
+            'reembolsado' => 'Reembolsado',
+            default => ucfirst(str_replace('_', ' ', $this->estado)),
+        };
     }
 }

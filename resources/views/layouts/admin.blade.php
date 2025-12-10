@@ -553,6 +553,12 @@
         ::-webkit-scrollbar-thumb:hover {
             background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
         }
+
+        /* HOVER EFFECT FOR USER NAME */
+        .user-info a:hover span {
+            text-decoration: underline;
+            color: var(--secondary-color) !important;
+        }
     </style>
 
     @yield('styles')
@@ -609,7 +615,10 @@
             <h1>@yield('page-title', 'Dashboard Admin')</h1>
             <div class="user-info">
                 <span class="admin-badge">ADMINISTRADOR</span>
-                <span><i class="fas fa-circle" style="color: #27ae60; font-size: 8px;"></i> {{ Auth::user()->name }}</span>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#perfilModal"
+                   class="text-decoration-none" style="color: var(--primary-color);" title="Ver mi perfil">
+                    <span><i class="fas fa-circle" style="color: #27ae60; font-size: 8px;"></i> {{ Auth::user()->name }}</span>
+                </a>
                 <form method="POST" action="{{ route('auth.logout') }}" style="display: inline;">
                     @csrf
                     <button type="submit" class="btn btn-sm btn-danger" title="Cerrar sesión">
@@ -657,9 +666,66 @@
         <!-- CONTENIDO -->
         @yield('content')
 
+        <!-- NOTIFICACIÓN DE CORREO -->
+        @include('components.email-notification')
+
         <!-- FOOTER -->
         <div class="footer">
             <p>&copy; 2025 Sistema de Reservas Hotel Oaxaca - Panel de Administrador. Todos los derechos reservados.</p>
+        </div>
+    </div>
+
+    <!-- MODAL PERFIL ADMINISTRADOR -->
+    <div class="modal fade" id="perfilModal" tabindex="-1" aria-labelledby="perfilModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="perfilModalLabel">
+                        <i class="fas fa-user-shield"></i> Mi Perfil de Administrador
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{{ route('admin.perfil.update') }}">
+                    @csrf
+                    @method('PUT')
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">
+                                <i class="fas fa-user"></i> Nombre Completo
+                            </label>
+                            <input type="text" class="form-control" id="name" name="name"
+                                   value="{{ old('name', Auth::user()->name) }}" required>
+                            @error('name')
+                                <div class="text-danger small mt-1">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">
+                                <i class="fas fa-envelope"></i> Correo Electrónico
+                            </label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                   value="{{ old('email', Auth::user()->email) }}" required>
+                            @error('email')
+                                <div class="text-danger small mt-1">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="alert alert-info small mb-0">
+                            <i class="fas fa-info-circle"></i>
+                            Esta información se utiliza para gestionar tu cuenta de administrador.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 

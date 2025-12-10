@@ -7,6 +7,12 @@ use App\Models\Cliente;
 use App\Models\Habitacion;
 use App\Models\Pago;
 use App\Models\Reserva;
+use App\Patterns\Behavioral\CambiarHabitacionCommand;
+use App\Patterns\Behavioral\CancelarReservaCommand;
+use App\Patterns\Behavioral\ConfirmarReservaCommand;
+use App\Patterns\Behavioral\HabitacionSearchInterpreter;
+use App\Patterns\Behavioral\ReservaCommandInvoker;
+use App\Patterns\Behavioral\ReservaSearchInterpreter;
 use Illuminate\Support\Facades\DB;
 
 class AdminDashboardController extends Controller
@@ -17,6 +23,7 @@ class AdminDashboardController extends Controller
 
         // ESTADÍSTICAS PRINCIPALES
         $reservasHoy = Reserva::whereDate('fecha_inicio', $today)
+            ->whereIn('estado', ['confirmada', 'completada'])
             ->count();
 
         $habitacionesDisponibles = Habitacion::where('estado', 'disponible')
@@ -32,9 +39,15 @@ class AdminDashboardController extends Controller
 
         $ingresosHoy = Pago::whereDate('created_at', $today)
             ->where('estado', 'completado')
+            ->whereHas('reserva', function ($query) {
+                $query->whereIn('estado', ['confirmada', 'completada']);
+            })
             ->sum('monto');
 
         $ingresosTotal = Pago::where('estado', 'completado')
+            ->whereHas('reserva', function ($query) {
+                $query->whereIn('estado', ['confirmada', 'completada']);
+            })
             ->sum('monto');
 
         // RESERVAS RECIENTES
@@ -47,6 +60,7 @@ class AdminDashboardController extends Controller
         $fechaFin = now()->addDays(7);
         $proximasReservas = Reserva::where('fecha_inicio', '>=', $today)
             ->where('fecha_inicio', '<=', $fechaFin)
+            ->whereIn('estado', ['confirmada', 'completada'])
             ->with('cliente', 'habitacion')
             ->orderBy('fecha_inicio')
             ->get();
@@ -55,19 +69,31 @@ class AdminDashboardController extends Controller
         $habitacionesProximas = Habitacion::with('reservas')
             ->whereHas('reservas', function ($query) use ($today, $fechaFin) {
                 $query->where('fecha_inicio', '>=', $today)
-                    ->where('fecha_inicio', '<=', $fechaFin);
+                    ->where('fecha_inicio', '<=', $fechaFin)
+                    ->whereIn('estado', ['confirmada', 'completada']);
             })
             ->get();
 
-        // CLIENTES TOP
-        $clientesTop = Cliente::withCount('reservas')
+        // CLIENTES TOP (últimos 12 meses)
+        // FIX: Filtrar por reservas recientes para reflejar clientes activos
+        $hace12Meses = now()->subMonths(12);
+        $clientesTop = Cliente::withCount(['reservas' => function ($query) use ($hace12Meses) {
+            $query->whereIn('estado', ['confirmada', 'completada'])
+                ->where('created_at', '>=', $hace12Meses);
+        }])
+            ->having('reservas_count', '>', 0)
             ->orderBy('reservas_count', 'desc')
             ->take(5)
             ->get();
 
-        // SERVICIOS MÁS VENDIDOS
+        // SERVICIOS MÁS VENDIDOS (últimos 6 meses)
+        // FIX: Filtrar por ventas recientes para reflejar tendencias actuales
+        $hace6Meses = now()->subMonths(6);
         $serviciosMasVendidos = DB::table('reserva_servicio')
             ->join('servicios', 'reserva_servicio.servicio_id', '=', 'servicios.id')
+            ->join('reservas', 'reserva_servicio.reserva_id', '=', 'reservas.id')
+            ->whereIn('reservas.estado', ['confirmada', 'completada'])
+            ->where('reservas.created_at', '>=', $hace6Meses)
             ->selectRaw('servicios.nombre, COUNT(*) as cantidad, SUM(reserva_servicio.subtotal) as total')
             ->groupBy('servicios.id', 'servicios.nombre')
             ->orderBy('cantidad', 'desc')
@@ -82,31 +108,40 @@ class AdminDashboardController extends Controller
             ->get();
 
         // GRÁFICO: Ingresos últimos 7 días
+        // FIX: Guardar now() fuera del loop para evitar inconsistencias
+        $fechaBase = now();
         $ingresosUltimaSemana = [];
         for ($i = 6; $i >= 0; $i--) {
-            $fecha = now()->subDays($i)->format('Y-m-d');
+            $fecha = $fechaBase->copy()->subDays($i)->format('Y-m-d');
             $ingreso = Pago::whereDate('created_at', $fecha)
                 ->where('estado', 'completado')
+                ->whereHas('reserva', function ($query) {
+                    $query->whereIn('estado', ['confirmada', 'completada']);
+                })
                 ->sum('monto');
             $ingresosUltimaSemana[$fecha] = $ingreso;
         }
 
-        return view('admin.dashboard', [
-            'reservasHoy' => $reservasHoy,
-            'habitacionesDisponibles' => $habitacionesDisponibles,
-            'habitacionesTotales' => $habitacionesTotales,
-            'ocupacion' => $ocupacion,
-            'pagosPendientes' => $pagosPendientes,
-            'ingresosHoy' => $ingresosHoy,
-            'ingresosTotal' => $ingresosTotal,
-            'reservasRecientes' => $reservasRecientes,
-            'proximasReservas' => $proximasReservas,
-            'habitacionesProximas' => $habitacionesProximas,
-            'clientesTop' => $clientesTop,
-            'serviciosMasVendidos' => $serviciosMasVendidos,
-            'ocupacionPorTipo' => $ocupacionPorTipo,
-            'ingresosUltimaSemana' => $ingresosUltimaSemana,
-        ]);
+        return response()
+            ->view('admin.dashboard', [
+                'reservasHoy' => $reservasHoy,
+                'habitacionesDisponibles' => $habitacionesDisponibles,
+                'habitacionesTotales' => $habitacionesTotales,
+                'ocupacion' => $ocupacion,
+                'pagosPendientes' => $pagosPendientes,
+                'ingresosHoy' => $ingresosHoy,
+                'ingresosTotal' => $ingresosTotal,
+                'reservasRecientes' => $reservasRecientes,
+                'proximasReservas' => $proximasReservas,
+                'habitacionesProximas' => $habitacionesProximas,
+                'clientesTop' => $clientesTop,
+                'serviciosMasVendidos' => $serviciosMasVendidos,
+                'ocupacionPorTipo' => $ocupacionPorTipo,
+                'ingresosUltimaSemana' => $ingresosUltimaSemana,
+            ])
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 
     public function reservas(\Illuminate\Http\Request $request)
@@ -115,7 +150,7 @@ class AdminDashboardController extends Controller
 
         // Usar Interpreter Pattern si hay parámetros de búsqueda
         if ($request->hasAny(['estado', 'cliente', 'habitacion', 'fecha_inicio', 'fecha_fin', 'precio_min', 'precio_max'])) {
-            $interpreter = \App\Patterns\Behavioral\ReservaSearchInterpreter::fromRequest($request->all());
+            $interpreter = ReservaSearchInterpreter::fromRequest($request->all());
             $query = $interpreter->interpret($query);
         }
 
@@ -133,7 +168,7 @@ class AdminDashboardController extends Controller
 
         // Usar Interpreter Pattern si hay parámetros de búsqueda
         if ($request->hasAny(['tipo', 'capacidad', 'precio_min', 'precio_max', 'piso', 'amenidades', 'estado'])) {
-            $interpreter = \App\Patterns\Behavioral\HabitacionSearchInterpreter::fromRequest($request->all());
+            $interpreter = HabitacionSearchInterpreter::fromRequest($request->all());
             $query = $interpreter->interpret($query);
         }
 
@@ -216,14 +251,14 @@ class AdminDashboardController extends Controller
 
         try {
             // Convertir amenidades de string a array
-            if (isset($validated['amenidades'])) {
+            if (isset($validated['amenidades']) && is_string($validated['amenidades'])) {
                 $amenidades = array_filter(array_map('trim', explode(',', $validated['amenidades'])));
 
                 if (count($amenidades) > 20) {
                     return redirect()
                         ->back()
                         ->withInput()
-                        ->with('error', '❌ No puede agregar más de 20 amenidades');
+                        ->with('error', 'No puede agregar más de 20 amenidades');
                 }
 
                 $validated['amenidades'] = $amenidades;
@@ -232,28 +267,31 @@ class AdminDashboardController extends Controller
             $numeroAnterior = $habitacion->numero;
             $habitacion->update($validated);
 
+            // Refrescar el modelo para obtener los datos actualizados
+            $habitacion->refresh();
+
             $tipoHabitacion = \App\Models\TipoHabitacion::find($validated['tipo_habitacion_id']);
 
             return redirect()
                 ->route('admin.habitaciones.index')
-                ->with('success', "✅ Habitación #{$numeroAnterior} actualizada correctamente a #{$habitacion->numero}. Tipo: {$tipoHabitacion->nombre}, Piso: {$habitacion->piso}, Capacidad: {$habitacion->capacidad} personas, Precio: $".number_format($habitacion->precio_base, 2));
+                ->with('success', "Habitación #{$numeroAnterior} actualizada correctamente a #{$habitacion->numero}. Tipo: {$tipoHabitacion->nombre}, Piso: {$habitacion->piso}, Capacidad: {$habitacion->capacidad} personas, Precio: $".number_format($habitacion->precio_base, 2));
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->errorInfo[1] === 1062) {
                 return redirect()
                     ->back()
                     ->withInput()
-                    ->with('error', '❌ Ya existe otra habitación con ese número. Por favor, elija otro.');
+                    ->with('error', 'Ya existe otra habitación con ese número. Por favor, elija otro.');
             }
 
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', '❌ Error de base de datos al actualizar la habitación. Por favor, intente nuevamente.');
+                ->with('error', 'Error de base de datos al actualizar la habitación. Por favor, intente nuevamente.');
         } catch (\Exception $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', '❌ Error al actualizar la habitación: '.$e->getMessage());
+                ->with('error', 'Error al actualizar la habitación: '.$e->getMessage());
         }
     }
 
@@ -318,7 +356,7 @@ class AdminDashboardController extends Controller
                     return redirect()
                         ->back()
                         ->withInput()
-                        ->with('error', '❌ No puede agregar más de 20 amenidades');
+                        ->with('error', 'No puede agregar más de 20 amenidades');
                 }
 
                 $validated['amenidades'] = $amenidades;
@@ -330,24 +368,24 @@ class AdminDashboardController extends Controller
 
             return redirect()
                 ->route('admin.habitaciones.index')
-                ->with('success', "✅ Habitación #{$habitacion->numero} creada exitosamente. Tipo: {$tipoHabitacion->nombre}, Piso: {$habitacion->piso}, Capacidad: {$habitacion->capacidad} personas, Precio: $".number_format($habitacion->precio_base, 2));
+                ->with('success', "Habitación #{$habitacion->numero} creada exitosamente. Tipo: {$tipoHabitacion->nombre}, Piso: {$habitacion->piso}, Capacidad: {$habitacion->capacidad} personas, Precio: $".number_format($habitacion->precio_base, 2));
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->errorInfo[1] === 1062) {
                 return redirect()
                     ->back()
                     ->withInput()
-                    ->with('error', '❌ Ya existe una habitación con ese número. Por favor, elija otro.');
+                    ->with('error', 'Ya existe una habitación con ese número. Por favor, elija otro.');
             }
 
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', '❌ Error de base de datos al crear la habitación. Por favor, intente nuevamente.');
+                ->with('error', 'Error de base de datos al crear la habitación. Por favor, intente nuevamente.');
         } catch (\Exception $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', '❌ Error al crear la habitación: '.$e->getMessage());
+                ->with('error', 'Error al crear la habitación: '.$e->getMessage());
         }
     }
 
@@ -487,31 +525,31 @@ class AdminDashboardController extends Controller
 
                 return redirect()
                     ->route('admin.habitaciones.index')
-                    ->with('success', "✅ Habitación {$habitacionOriginal->numero} clonada exitosamente como #{$nuevaHabitacion->numero} en el piso {$nuevaHabitacion->piso}. Se copiaron todas las características: tipo, capacidad, precio y amenidades.");
+                    ->with('success', "Habitación {$habitacionOriginal->numero} clonada exitosamente como #{$nuevaHabitacion->numero} en el piso {$nuevaHabitacion->piso}. Se copiaron todas las características: tipo, capacidad, precio y amenidades.");
             } else {
                 // Clonar simple
                 $nuevaHabitacion = $prototype->clonar($validated['nuevo_numero']);
 
                 return redirect()
                     ->route('admin.habitaciones.index')
-                    ->with('success', "✅ Habitación {$habitacionOriginal->numero} clonada exitosamente como #{$nuevaHabitacion->numero} en el piso {$nuevaHabitacion->piso}. Se copiaron todas las características: tipo, capacidad, precio y amenidades.");
+                    ->with('success', "Habitación {$habitacionOriginal->numero} clonada exitosamente como #{$nuevaHabitacion->numero} en el piso {$nuevaHabitacion->piso}. Se copiaron todas las características: tipo, capacidad, precio y amenidades.");
             }
         } catch (\Illuminate\Database\QueryException $e) {
             // Error de base de datos
             if ($e->errorInfo[1] === 1062) {
                 return redirect()
                     ->back()
-                    ->with('error', '❌ El número de habitación ya existe en el sistema. Por favor, elija otro número.');
+                    ->with('error', 'El número de habitación ya existe en el sistema. Por favor, elija otro número.');
             }
 
             return redirect()
                 ->back()
-                ->with('error', '❌ Error de base de datos al clonar la habitación. Por favor, intente nuevamente.');
+                ->with('error', 'Error de base de datos al clonar la habitación. Por favor, intente nuevamente.');
         } catch (\Exception $e) {
             // Error general
             return redirect()
                 ->back()
-                ->with('error', '❌ Error al clonar habitación: '.$e->getMessage());
+                ->with('error', 'Error al clonar habitación: '.$e->getMessage());
         }
     }
 
@@ -528,22 +566,28 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Confirmar reserva usando Command Pattern
+     * Confirmar reserva
      */
     public function confirmarReservaCommand($id)
     {
-        $reserva = Reserva::with('habitacion')->findOrFail($id);
+        $reserva = Reserva::with('habitacion', 'cliente')->findOrFail($id);
 
         // ============================================================
         // COMMAND PATTERN - Operación de confirmar reserva
         // ============================================================
-        $comando = new \App\Patterns\Behavioral\ConfirmarReservaCommand($reserva);
-        $invoker = new \App\Patterns\Behavioral\ReservaCommandInvoker;
+        $comando = new ConfirmarReservaCommand($reserva);
+        $invoker = new ReservaCommandInvoker;
 
         if ($invoker->ejecutar($comando)) {
             return redirect()
                 ->back()
-                ->with('success', 'Reserva confirmada exitosamente usando Command Pattern');
+                ->with('success', 'Reserva confirmada exitosamente')
+                ->with('email_notification', [
+                    'title' => 'Cliente Notificado - Reserva Confirmada',
+                    'message' => 'Se ha enviado una notificación al cliente confirmando su reserva.',
+                    'recipient' => $reserva->cliente->nombre.' '.$reserva->cliente->apellido,
+                    'email' => $reserva->cliente->email,
+                ]);
         }
 
         return redirect()
@@ -552,29 +596,66 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Cancelar reserva usando Command Pattern
+     * Cancelar reserva
      */
     public function cancelarReservaCommand(\Illuminate\Http\Request $request, $id)
     {
-        $reserva = Reserva::with('habitacion')->findOrFail($id);
+        $reserva = Reserva::with('habitacion', 'cliente', 'pagos')->findOrFail($id);
 
         $validated = $request->validate([
             'motivo' => 'nullable|string|max:500',
         ]);
 
+        // Verificar si la reserva tiene pagos completados
+        $totalPagado = $reserva->pagos()
+            ->where('estado', 'completado')
+            ->sum('monto');
+
+        // Si tiene pagos, marcar para reembolso
+        if ($totalPagado > 0) {
+            $reserva->update([
+                'estado' => 'en_proceso_reembolso',
+                'fecha_cancelacion' => now(),
+                'fecha_solicitud_reembolso' => now(),
+                'monto_reembolso' => $totalPagado,
+                'motivo_reembolso' => $validated['motivo'] ?? 'Cancelada por administrador',
+                'observaciones' => ($reserva->observaciones ?? '')."\n".now()->format('Y-m-d H:i:s').' - Cancelada por administrador. Reembolso iniciado: $'.number_format($totalPagado, 2),
+            ]);
+
+            // Liberar habitación
+            $reserva->habitacion->update(['estado' => 'disponible']);
+
+            return redirect()
+                ->back()
+                ->with('success', 'Reserva cancelada. Se ha iniciado el proceso de reembolso por $'.number_format($totalPagado, 2))
+                ->with('email_notification', [
+                    'title' => 'Cliente Notificado - Reembolso en Proceso',
+                    'message' => 'Se ha iniciado el proceso de reembolso por $'.number_format($totalPagado, 2).'. El cliente debe aceptar el reembolso desde su panel.',
+                    'recipient' => $reserva->cliente->nombre.' '.$reserva->cliente->apellido,
+                    'email' => $reserva->cliente->email,
+                ]);
+        }
+
+        // Si no tiene pagos, cancelación normal
         // ============================================================
         // COMMAND PATTERN - Operación de cancelar reserva
         // ============================================================
-        $comando = new \App\Patterns\Behavioral\CancelarReservaCommand(
+        $comando = new CancelarReservaCommand(
             $reserva,
             $validated['motivo'] ?? 'Cancelada por administrador'
         );
-        $invoker = new \App\Patterns\Behavioral\ReservaCommandInvoker;
+        $invoker = new ReservaCommandInvoker;
 
         if ($invoker->ejecutar($comando)) {
             return redirect()
                 ->back()
-                ->with('success', 'Reserva cancelada exitosamente usando Command Pattern');
+                ->with('success', 'Reserva cancelada exitosamente')
+                ->with('email_notification', [
+                    'title' => 'Cliente Notificado - Reserva Cancelada',
+                    'message' => 'Se ha enviado una notificación al cliente sobre la cancelación de su reserva.',
+                    'recipient' => $reserva->cliente->nombre.' '.$reserva->cliente->apellido,
+                    'email' => $reserva->cliente->email,
+                ]);
         }
 
         return redirect()
@@ -583,11 +664,11 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Cambiar habitación de una reserva usando Command Pattern
+     * Cambiar habitación de una reserva
      */
     public function cambiarHabitacionCommand(\Illuminate\Http\Request $request, $id)
     {
-        $reserva = Reserva::with('habitacion')->findOrFail($id);
+        $reserva = Reserva::with('habitacion', 'cliente')->findOrFail($id);
 
         $validated = $request->validate([
             'nueva_habitacion_id' => 'required|exists:habitacions,id',
@@ -598,20 +679,47 @@ class AdminDashboardController extends Controller
         // ============================================================
         // COMMAND PATTERN - Operación de cambiar habitación
         // ============================================================
-        $comando = new \App\Patterns\Behavioral\CambiarHabitacionCommand(
+        $comando = new CambiarHabitacionCommand(
             $reserva,
-            $nuevaHabitacion
+            $nuevaHabitacion->id
         );
-        $invoker = new \App\Patterns\Behavioral\ReservaCommandInvoker;
+        $invoker = new ReservaCommandInvoker;
 
         if ($invoker->ejecutar($comando)) {
             return redirect()
                 ->back()
-                ->with('success', "Habitación cambiada exitosamente a {$nuevaHabitacion->numero} usando Command Pattern");
+                ->with('success', "Habitación cambiada exitosamente a {$nuevaHabitacion->numero}")
+                ->with('email_notification', [
+                    'title' => 'Cliente Notificado - Cambio de Habitación',
+                    'message' => "Se ha enviado una notificación al cliente sobre el cambio de habitación a la #{$nuevaHabitacion->numero}.",
+                    'recipient' => $reserva->cliente->nombre.' '.$reserva->cliente->apellido,
+                    'email' => $reserva->cliente->email,
+                ]);
         }
 
         return redirect()
             ->back()
             ->with('error', 'No se pudo cambiar la habitación');
+    }
+
+    /**
+     * Actualizar perfil del administrador
+     */
+    public function updatePerfil(\Illuminate\Http\Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:usuarios,email,'.auth()->id(),
+        ], [
+            'name.required' => 'El nombre es obligatorio',
+            'email.required' => 'El email es obligatorio',
+            'email.email' => 'El email debe ser válido',
+            'email.unique' => 'Este email ya está en uso',
+        ]);
+
+        $usuario = auth()->user();
+        $usuario->update($validated);
+
+        return redirect()->back()->with('success', 'Perfil actualizado correctamente');
     }
 }

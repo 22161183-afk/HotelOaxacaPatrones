@@ -216,8 +216,41 @@
 </div>
 
 @if($habitacion)
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+<!-- Flatpickr JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
 <script>
     const precioPorNoche = {{ $habitacion->precio_base }};
+
+    // Configurar Flatpickr en español
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fecha de inicio
+        flatpickr("#fecha_inicio", {
+            locale: "es",
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            onChange: function() {
+                calcularPrecio();
+            }
+        });
+
+        // Fecha de fin
+        flatpickr("#fecha_fin", {
+            locale: "es",
+            dateFormat: "Y-m-d",
+            minDate: new Date().fp_incr(1), // Mínimo mañana
+            onChange: function() {
+                calcularPrecio();
+            }
+        });
+
+        // Calcular al cargar si hay fechas
+        calcularPrecio();
+    });
 
     function calcularPrecio() {
         const fechaInicio = document.getElementById('fecha_inicio').value;
@@ -250,9 +283,6 @@
             }
         }
     }
-
-    // Calcular al cargar si hay fechas
-    document.addEventListener('DOMContentLoaded', calcularPrecio);
 </script>
 @endif
 

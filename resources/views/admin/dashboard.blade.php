@@ -16,7 +16,7 @@
         <div class="card stat-card primary">
             <h5><i class="fas fa-calendar-check"></i> Reservas Hoy</h5>
             <div class="stat-value">{{ $reservasHoy }}</div>
-            <small class="text-muted">Nuevas reservas hoy</small>
+            <small class="text-muted">Check-ins confirmados hoy</small>
         </div>
     </div>
     <div class="col-md-3">
@@ -63,7 +63,7 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-star"></i> Servicios Más Vendidos</h5>
+                <h5 class="mb-0"><i class="fas fa-star"></i> Servicios Más Vendidos (Últimos 6 Meses)</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -97,7 +97,7 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-users"></i> Top Clientes</h5>
+                <h5 class="mb-0"><i class="fas fa-users"></i> Top Clientes (Últimos 12 Meses)</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">

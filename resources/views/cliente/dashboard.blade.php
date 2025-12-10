@@ -17,25 +17,32 @@
 
 <!-- ESTADÍSTICAS DEL CLIENTE -->
 <div class="row">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card primary">
             <h5><i class="fas fa-calendar-check"></i> Reservas Activas</h5>
             <div class="stat-value">{{ $reservasActivas->count() }}</div>
             <small class="text-muted">Reservas próximas</small>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card success">
             <h5><i class="fas fa-history"></i> Total Reservas</h5>
             <div class="stat-value">{{ $totalReservas }}</div>
             <small class="text-muted">Historial completo</small>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card warning">
             <h5><i class="fas fa-dollar-sign"></i> Total Gastado</h5>
             <div class="stat-value">${{ number_format($totalGastado, 0) }}</div>
             <small class="text-muted">En reservas completadas</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card danger">
+            <h5><i class="fas fa-undo"></i> Dinero Reembolsado</h5>
+            <div class="stat-value">${{ number_format($totalReembolsado, 0) }}</div>
+            <small class="text-muted">Total reembolsos aceptados</small>
         </div>
     </div>
 </div>
@@ -75,7 +82,7 @@
                                         @elseif($reserva->estado === 'pendiente')
                                             <span class="badge bg-warning">Pendiente</span>
                                         @else
-                                            <span class="badge bg-secondary">{{ ucfirst($reserva->estado) }}</span>
+                                            <span class="badge bg-secondary">{{ $reserva->estado_formateado }}</span>
                                         @endif
                                     </td>
                                 </tr>

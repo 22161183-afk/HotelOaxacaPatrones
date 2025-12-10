@@ -70,6 +70,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     });
 
     Route::get('/api-docs', [AdminDashboardController::class, 'apiDocumentation'])->name('api-docs');
+
+    Route::put('/perfil', [AdminDashboardController::class, 'updatePerfil'])->name('perfil.update');
 });
 
 // ============================================================
@@ -86,6 +88,7 @@ Route::middleware(['auth', 'role:cliente'])->prefix('cliente')->name('cliente.')
         Route::get('/{id}/editar', [ClienteDashboardController::class, 'editReserva'])->name('edit');
         Route::put('/{id}', [ClienteDashboardController::class, 'updateReserva'])->name('update');
         Route::put('/{id}/cancelar', [ClienteDashboardController::class, 'cancelarReserva'])->name('cancelar');
+        Route::post('/{id}/aceptar-reembolso', [ClienteDashboardController::class, 'aceptarReembolso'])->name('aceptar-reembolso');
     });
 
     Route::prefix('habitaciones')->name('habitaciones.')->group(function () {
@@ -96,4 +99,6 @@ Route::middleware(['auth', 'role:cliente'])->prefix('cliente')->name('cliente.')
         Route::get('/crear', [ClienteDashboardController::class, 'createPago'])->name('create');
         Route::post('/', [ClienteDashboardController::class, 'storePago'])->name('store');
     });
+
+    Route::put('/perfil', [ClienteDashboardController::class, 'updatePerfil'])->name('perfil.update');
 });

@@ -28,7 +28,6 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Nombre</th>
                         <th>Tipo</th>
                         <th>Descripción</th>
@@ -39,7 +38,6 @@
                 <tbody>
                     @forelse($metodosPago as $metodo)
                         <tr>
-                            <td><strong>#{{ $metodo->id }}</strong></td>
                             <td>{{ $metodo->nombre }}</td>
                             <td>
                                 @if($metodo->tipo === 'tarjeta_credito')
@@ -70,16 +68,39 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted">No hay métodos de pago registrados</td>
+                            <td colspan="5" class="text-center text-muted">No hay métodos de pago registrados</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
+        <!-- PAGINACIÓN PERSONALIZADA -->
         @if($metodosPago->hasPages())
-            <div class="d-flex justify-content-center mt-4">
-                {{ $metodosPago->links() }}
+            <div class="mt-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <!-- Botones de navegación -->
+                    <div>
+                        @if($metodosPago->onFirstPage())
+                            <span class="text-muted">« Volver</span>
+                        @else
+                            <a href="{{ $metodosPago->previousPageUrl() }}" class="text-decoration-none">« Volver</a>
+                        @endif
+
+                        <span class="mx-3">|</span>
+
+                        @if($metodosPago->hasMorePages())
+                            <a href="{{ $metodosPago->nextPageUrl() }}" class="text-decoration-none">Siguiente »</a>
+                        @else
+                            <span class="text-muted">Siguiente »</span>
+                        @endif
+                    </div>
+
+                    <!-- Información de resultados -->
+                    <div class="text-muted small">
+                        Mostrando {{ $metodosPago->firstItem() ?? 0 }} a {{ $metodosPago->lastItem() ?? 0 }} de {{ $metodosPago->total() }} resultados
+                    </div>
+                </div>
             </div>
         @endif
     </div>
