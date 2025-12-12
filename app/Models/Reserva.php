@@ -29,6 +29,9 @@ class Reserva extends Model
         'fecha_solicitud_reembolso',
         'fecha_reembolso',
         'motivo_reembolso',
+        'monto_diferencia',
+        'tipo_diferencia',
+        'fecha_diferencia_pagada',
     ];
 
     protected $casts = [
@@ -38,9 +41,11 @@ class Reserva extends Model
         'fecha_cancelacion' => 'datetime',
         'fecha_solicitud_reembolso' => 'datetime',
         'fecha_reembolso' => 'datetime',
+        'fecha_diferencia_pagada' => 'datetime',
         'precio_total' => 'decimal:2',
         'precio_servicios' => 'decimal:2',
         'monto_reembolso' => 'decimal:2',
+        'monto_diferencia' => 'decimal:2',
     ];
 
     public function cliente(): BelongsTo

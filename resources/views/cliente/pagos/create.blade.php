@@ -21,7 +21,15 @@
 
                 <!-- Información de la Reserva -->
                 <div class="alert alert-info mb-4">
-                    <h5 class="mb-3">Detalles de la Reserva</h5>
+                    @if($esDiferencia ?? false)
+                        <h5 class="mb-3"><i class="fas fa-exchange-alt"></i> Pago de Diferencia por Cambio de Habitación</h5>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-info-circle"></i> La habitación de tu reserva fue cambiada. Debes pagar la diferencia de precio.
+                        </div>
+                    @else
+                        <h5 class="mb-3">Detalles de la Reserva</h5>
+                    @endif
+
                     <div class="row">
                         <div class="col-md-6">
                             <p class="mb-1"><strong>Reserva #:</strong> {{ $reserva->id }}</p>
@@ -37,7 +45,12 @@
                     <hr>
                     <div class="text-end">
                         <h4 class="text-success mb-0">
-                            <strong>Total a Pagar:</strong> ${{ number_format($reserva->precio_total, 2) }}
+                            <strong>Total a Pagar:</strong>
+                            @if($esDiferencia ?? false)
+                                ${{ number_format($reserva->monto_diferencia, 2) }}
+                            @else
+                                ${{ number_format($reserva->precio_total, 2) }}
+                            @endif
                         </h4>
                     </div>
                 </div>
@@ -46,6 +59,9 @@
                 <form action="{{ route('cliente.pagos.store') }}" method="POST" id="pagoForm">
                     @csrf
                     <input type="hidden" name="reserva_id" value="{{ $reserva->id }}">
+                    @if($esDiferencia ?? false)
+                        <input type="hidden" name="es_diferencia" value="1">
+                    @endif
 
                     <div class="mb-4">
                         <label class="form-label"><strong>Seleccione Método de Pago</strong> <span class="text-danger">*</span></label>
@@ -151,20 +167,33 @@
                 <h5 class="mb-0"><i class="fas fa-file-invoice-dollar"></i> Resumen</h5>
             </div>
             <div class="card-body">
-                <table class="table table-sm mb-0">
-                    <tr>
-                        <td>Habitación ({{ abs($reserva->calcularNoches()) }} noches):</td>
-                        <td class="text-end">${{ number_format($reserva->precio_total, 2) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Servicios adicionales:</td>
-                        <td class="text-end">${{ number_format($reserva->precio_servicios ?? 0, 2) }}</td>
-                    </tr>
-                    <tr class="fw-bold border-top">
-                        <td>Total:</td>
-                        <td class="text-end text-success">${{ number_format($reserva->precio_total + ($reserva->precio_servicios ?? 0), 2) }}</td>
-                    </tr>
-                </table>
+                @if($esDiferencia ?? false)
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Diferencia por cambio de habitación:</td>
+                            <td class="text-end text-warning">${{ number_format($reserva->monto_diferencia, 2) }}</td>
+                        </tr>
+                        <tr class="fw-bold border-top">
+                            <td>Total a Pagar:</td>
+                            <td class="text-end text-success">${{ number_format($reserva->monto_diferencia, 2) }}</td>
+                        </tr>
+                    </table>
+                @else
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Habitación ({{ abs($reserva->calcularNoches()) }} noches):</td>
+                            <td class="text-end">${{ number_format($reserva->precio_total, 2) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Servicios adicionales:</td>
+                            <td class="text-end">${{ number_format($reserva->precio_servicios ?? 0, 2) }}</td>
+                        </tr>
+                        <tr class="fw-bold border-top">
+                            <td>Total:</td>
+                            <td class="text-end text-success">${{ number_format($reserva->precio_total + ($reserva->precio_servicios ?? 0), 2) }}</td>
+                        </tr>
+                    </table>
+                @endif
             </div>
         </div>
     </div>

@@ -140,6 +140,8 @@ class CambiarHabitacionCommand implements ReservaCommand
 
     private ?int $habitacionAnteriorId = null;
 
+    private ?float $precioAnterior = null;
+
     public function __construct(Reserva $reserva, int $nuevaHabitacionId)
     {
         $this->reserva = $reserva;
@@ -149,6 +151,7 @@ class CambiarHabitacionCommand implements ReservaCommand
     public function execute(): bool
     {
         $this->habitacionAnteriorId = $this->reserva->habitacion_id;
+        $this->precioAnterior = $this->reserva->precio_total;
 
         // Obtener habitación anterior antes de cambiar
         $habitacionAnterior = $this->reserva->habitacion;
@@ -158,7 +161,52 @@ class CambiarHabitacionCommand implements ReservaCommand
 
         // Refrescar la relación para obtener la nueva habitación
         $this->reserva->refresh();
-        $this->reserva->load('habitacion');
+        $this->reserva->load('habitacion', 'servicios');
+
+        // Recalcular precio total con la nueva habitación
+        $noches = $this->reserva->calcularNoches();
+        $precioHabitacion = $this->reserva->habitacion->precio_base * $noches;
+        $precioServicios = $this->reserva->calcularPrecioServicios();
+        $subtotal = $precioHabitacion + $precioServicios;
+
+        // Aplicar impuesto
+        $config = \App\Patterns\Creational\ConfiguracionSingleton::getInstance();
+        $impuesto = $config->getImpuesto();
+        $montoImpuesto = $subtotal * ($impuesto / 100);
+        $precioTotal = $subtotal + $montoImpuesto;
+
+        // Calcular diferencia de precio
+        $diferencia = $precioTotal - $this->precioAnterior;
+
+        // Preparar datos de actualización
+        $datosActualizacion = [
+            'precio_total' => $precioTotal,
+            'precio_servicios' => $precioServicios,
+        ];
+
+        // Gestionar diferencia de precio
+        if (abs($diferencia) >= 0.01) { // Si hay diferencia significativa
+            $datosActualizacion['monto_diferencia'] = abs($diferencia);
+
+            if ($diferencia > 0) {
+                // Cliente debe pagar la diferencia
+                $datosActualizacion['tipo_diferencia'] = 'pagar';
+            } else {
+                // Cliente recibirá reembolso de la diferencia
+                $datosActualizacion['tipo_diferencia'] = 'reembolsar';
+            }
+
+            // Resetear fecha de pago de diferencia
+            $datosActualizacion['fecha_diferencia_pagada'] = null;
+        } else {
+            // No hay diferencia significativa, limpiar campos
+            $datosActualizacion['monto_diferencia'] = null;
+            $datosActualizacion['tipo_diferencia'] = null;
+            $datosActualizacion['fecha_diferencia_pagada'] = null;
+        }
+
+        // Actualizar precios en la reserva
+        $this->reserva->update($datosActualizacion);
 
         // Liberar habitación anterior
         $habitacionAnterior->update(['estado' => 'disponible']);
@@ -177,6 +225,30 @@ class CambiarHabitacionCommand implements ReservaCommand
 
             // Restaurar habitación anterior
             $this->reserva->update(['habitacion_id' => $this->habitacionAnteriorId]);
+
+            // Refrescar para obtener la habitación restaurada
+            $this->reserva->refresh();
+            $this->reserva->load('habitacion', 'servicios');
+
+            // Recalcular precio total con la habitación anterior
+            $noches = $this->reserva->calcularNoches();
+            $precioHabitacion = $this->reserva->habitacion->precio_base * $noches;
+            $precioServicios = $this->reserva->calcularPrecioServicios();
+            $subtotal = $precioHabitacion + $precioServicios;
+
+            // Aplicar impuesto
+            $config = \App\Patterns\Creational\ConfiguracionSingleton::getInstance();
+            $impuesto = $config->getImpuesto();
+            $montoImpuesto = $subtotal * ($impuesto / 100);
+            $precioTotal = $subtotal + $montoImpuesto;
+
+            // Actualizar precios en la reserva
+            $this->reserva->update([
+                'precio_total' => $precioTotal,
+                'precio_servicios' => $precioServicios,
+            ]);
+
+            // Ocupar habitación anterior
             $this->reserva->habitacion->update(['estado' => 'ocupada']);
 
             return true;

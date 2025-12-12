@@ -102,22 +102,96 @@
                 <hr>
 
                 <h5><i class="fas fa-dollar-sign"></i> Resumen de Precios</h5>
+                @php
+                    $noches = $reserva->calcularNoches();
+                    $precioHabitacion = $reserva->habitacion->precio_base * $noches;
+                    $precioServicios = $reserva->calcularPrecioServicios();
+                    $subtotal = $precioHabitacion + $precioServicios;
+                    $config = \App\Patterns\Creational\ConfiguracionSingleton::getInstance();
+                    $impuesto = $config->getImpuesto();
+                    $montoIVA = $subtotal * ($impuesto / 100);
+                    $totalCalculado = $subtotal + $montoIVA;
+                @endphp
                 <div class="row">
                     <div class="col-md-6 offset-md-6">
                         <table class="table table-sm">
                             <tr>
-                                <td><strong>Habitación:</strong></td>
-                                <td class="text-end">${{ number_format($reserva->precio_total - $reserva->precio_servicios, 2) }}</td>
+                                <td>Habitación:</td>
+                                <td class="text-end">${{ number_format($reserva->habitacion->precio_base, 2) }} × {{ $noches }} {{ $noches == 1 ? 'noche' : 'noches' }}</td>
+                                <td class="text-end"><strong>${{ number_format($precioHabitacion, 2) }}</strong></td>
+                            </tr>
+                            @if($precioServicios > 0)
+                            <tr>
+                                <td>Servicios adicionales:</td>
+                                <td></td>
+                                <td class="text-end"><strong>${{ number_format($precioServicios, 2) }}</strong></td>
+                            </tr>
+                            @endif
+                            <tr class="border-top">
+                                <td><strong>Subtotal (sin IVA):</strong></td>
+                                <td></td>
+                                <td class="text-end">${{ number_format($subtotal, 2) }}</td>
                             </tr>
                             <tr>
-                                <td><strong>Servicios:</strong></td>
-                                <td class="text-end">${{ number_format($reserva->precio_servicios, 2) }}</td>
+                                <td>IVA ({{ $impuesto }}%):</td>
+                                <td class="text-muted small">Sobre ${{ number_format($subtotal, 2) }}</td>
+                                <td class="text-end">${{ number_format($montoIVA, 2) }}</td>
                             </tr>
-                            <tr class="table-active">
-                                <td><strong>TOTAL:</strong></td>
-                                <td class="text-end"><strong>${{ number_format($reserva->precio_total, 2) }}</strong></td>
+                            <tr class="table-active border-top">
+                                <td><strong>TOTAL (IVA incluido):</strong></td>
+                                <td></td>
+                                <td class="text-end"><strong class="text-primary">${{ number_format($reserva->precio_total, 2) }}</strong></td>
                             </tr>
                         </table>
+
+                        @if(abs($totalCalculado - $reserva->precio_total) > 0.01)
+                            <div class="alert alert-warning alert-sm">
+                                <small><i class="fas fa-exclamation-triangle"></i> Diferencia de cálculo: ${{ number_format(abs($totalCalculado - $reserva->precio_total), 2) }}</small>
+                            </div>
+                        @endif
+
+                        {{-- Diferencia de precio por cambio de habitación --}}
+                        @if($reserva->monto_diferencia && !$reserva->fecha_diferencia_pagada)
+                            <div class="alert {{ $reserva->tipo_diferencia === 'pagar' ? 'alert-warning' : 'alert-info' }} mt-3">
+                                <h6 class="mb-3">
+                                    <i class="fas {{ $reserva->tipo_diferencia === 'pagar' ? 'fa-exclamation-circle' : 'fa-info-circle' }}"></i>
+                                    Diferencia por Cambio de Habitación - Pendiente
+                                </h6>
+                                <p class="mb-2">
+                                    <strong>Monto:</strong> ${{ number_format($reserva->monto_diferencia, 2) }}
+                                </p>
+                                <p class="mb-3">
+                                    @if($reserva->tipo_diferencia === 'pagar')
+                                        <span class="badge bg-warning">El cliente debe pagar esta diferencia</span>
+                                        <br><small class="text-muted mt-2 d-block">
+                                            <i class="fas fa-info-circle"></i> Cuando el cliente pague, el pago aparecerá "En Proceso" en la
+                                            <a href="{{ route('admin.pagos.index') }}">vista de pagos</a> para que lo apruebes.
+                                        </small>
+                                    @else
+                                        <span class="badge bg-info">Se debe reembolsar al cliente</span>
+                                        <br><small class="text-muted mt-2 d-block">
+                                            <i class="fas fa-info-circle"></i> Cuando el cliente acepte el reembolso, se marcará automáticamente como procesado.
+                                        </small>
+                                    @endif
+                                </p>
+
+                                <div class="d-flex gap-2">
+                                    <form action="{{ route('admin.reservas.cancelar-diferencia', $reserva->id) }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('¿Cancelar la gestión de esta diferencia?')">
+                                            <i class="fas fa-times"></i> Cancelar Diferencia
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        @elseif($reserva->monto_diferencia && $reserva->fecha_diferencia_pagada)
+                            <div class="alert alert-success mt-3">
+                                <i class="fas fa-check-circle"></i>
+                                <strong>Diferencia {{ $reserva->tipo_diferencia === 'pagar' ? 'pagada' : 'reembolsada' }}:</strong>
+                                ${{ number_format($reserva->monto_diferencia, 2) }}
+                                el {{ $reserva->fecha_diferencia_pagada->format('d/m/Y H:i') }}
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -292,7 +366,7 @@
 
 <!-- Modal Cambiar Habitación -->
 <div class="modal fade" id="cambiarHabitacionModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="{{ route('admin.reservas.cambiar-habitacion', $reserva->id) }}">
                 @csrf
@@ -301,26 +375,137 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p><strong>Habitación actual:</strong> {{ $reserva->habitacion->numero }} ({{ $reserva->habitacion->tipoHabitacion->nombre }})</p>
+                    @php
+                        $noches = $reserva->calcularNoches();
+                        $precioActualHab = $reserva->habitacion->precio_base * $noches;
+                        $servicios = $reserva->calcularPrecioServicios();
+                        $subtotalActual = $precioActualHab + $servicios;
+                        $config = \App\Patterns\Creational\ConfiguracionSingleton::getInstance();
+                        $impuesto = $config->getImpuesto();
+                        $montoImpuestoActual = $subtotalActual * ($impuesto / 100);
+                    @endphp
+
+                    <div class="alert alert-info">
+                        <h6 class="mb-3"><strong>Precio Actual de la Reserva:</strong></h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr>
+                                <td>Habitación #{{ $reserva->habitacion->numero }}:</td>
+                                <td class="text-end">${{ number_format($reserva->habitacion->precio_base, 2) }} × {{ $noches }} {{ $noches == 1 ? 'noche' : 'noches' }} = <strong>${{ number_format($precioActualHab, 2) }}</strong></td>
+                            </tr>
+                            @if($servicios > 0)
+                            <tr>
+                                <td>Servicios adicionales:</td>
+                                <td class="text-end"><strong>${{ number_format($servicios, 2) }}</strong></td>
+                            </tr>
+                            @endif
+                            <tr class="border-top">
+                                <td>Subtotal:</td>
+                                <td class="text-end">${{ number_format($subtotalActual, 2) }}</td>
+                            </tr>
+                            <tr>
+                                <td>IVA ({{ $impuesto }}%):</td>
+                                <td class="text-end">${{ number_format($montoImpuestoActual, 2) }}</td>
+                            </tr>
+                            <tr class="border-top">
+                                <td><strong>Total:</strong></td>
+                                <td class="text-end"><strong>${{ number_format($reserva->precio_total, 2) }}</strong></td>
+                            </tr>
+                        </table>
+                    </div>
+
                     <div class="mb-3">
                         <label for="nueva_habitacion_id" class="form-label">Nueva Habitación</label>
-                        <select class="form-select" id="nueva_habitacion_id" name="nueva_habitacion_id" required>
+                        <select class="form-select" id="nueva_habitacion_id" name="nueva_habitacion_id" required onchange="calcularDiferencia()">
                             <option value="">Seleccionar habitación...</option>
                             @foreach(\App\Models\Habitacion::where('estado', 'disponible')->where('id', '!=', $reserva->habitacion_id)->get() as $hab)
-                                <option value="{{ $hab->id }}">
-                                    #{{ $hab->numero }} - {{ $hab->tipoHabitacion->nombre }} - Piso {{ $hab->piso }} - ${{ number_format($hab->precio_base, 2) }}
+                                <option value="{{ $hab->id }}" data-precio="{{ $hab->precio_base }}">
+                                    #{{ $hab->numero }} - {{ $hab->tipoHabitacion->nombre }} - Piso {{ $hab->piso }} - ${{ number_format($hab->precio_base, 2) }}/noche
                                 </option>
                             @endforeach
                         </select>
                     </div>
+
+                    <div id="diferenciaPrecio" class="alert alert-secondary d-none">
+                        <h6 class="mb-3"><strong>Nuevo Precio Estimado:</strong></h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr>
+                                <td>Habitación seleccionada:</td>
+                                <td class="text-end"><span id="nuevoPrecioHab"></span></td>
+                            </tr>
+                            @if($servicios > 0)
+                            <tr>
+                                <td>Servicios adicionales:</td>
+                                <td class="text-end"><strong>${{ number_format($servicios, 2) }}</strong></td>
+                            </tr>
+                            @endif
+                            <tr class="border-top">
+                                <td>Subtotal:</td>
+                                <td class="text-end"><span id="nuevoSubtotal"></span></td>
+                            </tr>
+                            <tr>
+                                <td>IVA ({{ $impuesto }}%):</td>
+                                <td class="text-end"><span id="nuevoImpuesto"></span></td>
+                            </tr>
+                            <tr class="border-top">
+                                <td><strong>Nuevo Total:</strong></td>
+                                <td class="text-end"><strong><span id="nuevoTotal"></span></strong></td>
+                            </tr>
+                            <tr class="border-top bg-warning-subtle">
+                                <td><strong>Diferencia:</strong></td>
+                                <td class="text-end"><strong><span id="montoDiferencia"></span></strong></td>
+                            </tr>
+                        </table>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-warning">Cambiar Habitación</button>
+                    <button type="submit" class="btn btn-warning">Confirmar Cambio</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+function calcularDiferencia() {
+    const select = document.getElementById('nueva_habitacion_id');
+    const selectedOption = select.options[select.selectedIndex];
+
+    if (!selectedOption.value) {
+        document.getElementById('diferenciaPrecio').classList.add('d-none');
+        return;
+    }
+
+    const nuevoPrecioNoche = parseFloat(selectedOption.dataset.precio);
+    const noches = {{ $noches }};
+    const servicios = {{ $servicios }};
+    const impuesto = {{ $impuesto }};
+
+    const nuevoPrecioHab = nuevoPrecioNoche * noches;
+    const nuevoSubtotal = nuevoPrecioHab + servicios;
+    const nuevoImpuesto = nuevoSubtotal * (impuesto / 100);
+    const nuevoTotal = nuevoSubtotal + nuevoImpuesto;
+
+    const precioActual = {{ $reserva->precio_total }};
+    const diferencia = nuevoTotal - precioActual;
+
+    document.getElementById('nuevoPrecioHab').textContent = '$' + nuevoPrecioNoche.toFixed(2) + ' × ' + noches + ' = $' + nuevoPrecioHab.toFixed(2);
+    document.getElementById('nuevoSubtotal').textContent = '$' + nuevoSubtotal.toFixed(2);
+    document.getElementById('nuevoImpuesto').textContent = '$' + nuevoImpuesto.toFixed(2);
+    document.getElementById('nuevoTotal').textContent = '$' + nuevoTotal.toFixed(2);
+
+    let diferenciaTexto = '';
+    if (Math.abs(diferencia) < 0.01) {
+        diferenciaTexto = 'Sin cambio';
+    } else if (diferencia > 0) {
+        diferenciaTexto = '+$' + diferencia.toFixed(2) + ' (Cliente debe pagar)';
+    } else {
+        diferenciaTexto = '-$' + Math.abs(diferencia).toFixed(2) + ' (Se reembolsará al cliente)';
+    }
+
+    document.getElementById('montoDiferencia').textContent = diferenciaTexto;
+    document.getElementById('diferenciaPrecio').classList.remove('d-none');
+}
+</script>
 
 @endsection

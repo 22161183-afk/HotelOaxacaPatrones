@@ -48,17 +48,36 @@
                                     <span class="badge bg-success">Pagado</span>
                                 @elseif($pago->estado === 'pendiente')
                                     <span class="badge bg-warning">Pendiente</span>
+                                @elseif($pago->estado === 'en_proceso')
+                                    <span class="badge bg-info">En Proceso</span>
                                 @elseif($pago->estado === 'reembolsado')
                                     <span class="badge bg-danger">Reembolsado</span>
                                 @else
                                     <span class="badge bg-secondary">{{ ucfirst($pago->estado) }}</span>
                                 @endif
+
+                                @if(strpos($pago->observaciones, 'Pago de diferencia') !== false)
+                                    <br><small class="text-muted"><i class="fas fa-exchange-alt"></i> Diferencia</small>
+                                @endif
                             </td>
                             <td>{{ $pago->created_at->format('d/m/Y H:i') }}</td>
-                            <td>
-                                <a href="{{ route('admin.reservas.show', $pago->reserva_id) }}" class="btn btn-sm btn-primary" title="Ver detalles de la reserva">
-                                    <i class="fas fa-eye"></i>
-                                </a>
+                            <td style="min-width: 130px;">
+                                <div class="d-flex flex-column gap-1">
+                                    <a href="{{ route('admin.reservas.show', $pago->reserva_id) }}" class="btn btn-sm btn-primary" title="Ver detalles de la reserva">
+                                        <i class="fas fa-eye"></i> Ver
+                                    </a>
+
+                                    @if($pago->estado === 'en_proceso' && strpos($pago->observaciones, 'Pago de diferencia') !== false)
+                                        <form action="{{ route('admin.pagos.aprobar-diferencia', $pago->id) }}" method="POST" style="display: inline;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success w-100"
+                                                    onclick="return confirm('¿Aprobar pago de diferencia de ${{ number_format($pago->monto, 2) }}?')"
+                                                    title="Aprobar pago de diferencia">
+                                                <i class="fas fa-check"></i> Aprobar
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty

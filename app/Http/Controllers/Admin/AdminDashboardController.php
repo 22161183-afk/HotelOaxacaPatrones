@@ -703,6 +703,60 @@ class AdminDashboardController extends Controller
     }
 
     /**
+     * Aprobar pago de diferencia (cuando el cliente ya pagó)
+     */
+    public function aprobarPagoDiferencia($id)
+    {
+        $pago = Pago::with('reserva')->findOrFail($id);
+
+        // Validar que sea un pago de diferencia en proceso
+        if ($pago->estado !== 'en_proceso' || strpos($pago->observaciones, 'Pago de diferencia') === false) {
+            return redirect()->back()->with('error', 'Este pago no es una diferencia en proceso.');
+        }
+
+        $reserva = $pago->reserva;
+
+        // Actualizar estado del pago a completado
+        $pago->update([
+            'estado' => 'completado',
+            'observaciones' => 'Pago de diferencia por cambio de habitación - Aprobado',
+        ]);
+
+        // Marcar la diferencia como pagada en la reserva
+        $reserva->update([
+            'fecha_diferencia_pagada' => now(),
+        ]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Pago de diferencia aprobado: $'.number_format($pago->monto, 2));
+    }
+
+    /**
+     * Cancelar gestión de diferencia de precio
+     */
+    public function cancelarDiferencia($id)
+    {
+        $reserva = Reserva::findOrFail($id);
+
+        // Validar que tenga una diferencia pendiente
+        if (! $reserva->monto_diferencia) {
+            return redirect()->back()->with('error', 'No hay diferencia de precio para cancelar.');
+        }
+
+        // Limpiar campos de diferencia
+        $reserva->update([
+            'monto_diferencia' => null,
+            'tipo_diferencia' => null,
+            'fecha_diferencia_pagada' => null,
+        ]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Gestión de diferencia de precio cancelada');
+    }
+
+    /**
      * Actualizar perfil del administrador
      */
     public function updatePerfil(\Illuminate\Http\Request $request)

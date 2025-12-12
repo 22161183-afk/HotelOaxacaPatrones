@@ -189,7 +189,7 @@ class ClienteDashboardController extends Controller
 
         $validated = $request->validate([
             'habitacion_id' => 'required|exists:habitacions,id',
-            'fecha_inicio' => 'required|date|after_or_equal:today',
+            'fecha_inicio' => 'required|date|after_or_equal:'.now()->toDateString(),
             'fecha_fin' => 'required|date|after:fecha_inicio',
             'numero_huespedes' => 'required|integer|min:1',
             'servicios' => 'nullable|array',
@@ -230,18 +230,9 @@ class ClienteDashboardController extends Controller
         $reserva->refresh();
         $reserva->load(['habitacion', 'cliente', 'servicios']);
 
-        // Aplicar estrategia de precio óptima automáticamente
-        $precioOptimizado = $reserva->aplicarMejorEstrategia();
-
-        \Log::info("Precio optimizado calculado: {$precioOptimizado} para reserva #{$reserva->id}");
-
-        // Actualizar el precio total (incluyendo servicios)
-        $precioTotal = $precioOptimizado + $reserva->precio_servicios;
-        $reserva->update(['precio_total' => $precioTotal]);
-
-        // Refrescar para obtener el valor actualizado
-        $reserva->refresh();
-
+        // NOTA: El precio ya fue calculado por el Builder con impuestos incluidos
+        // No se aplica estrategia de descuento automáticamente para evitar
+        // sobrescribir el cálculo correcto del Builder
         \Log::info("Precio total guardado: {$reserva->precio_total} para reserva #{$reserva->id}");
 
         return redirect()
@@ -315,7 +306,7 @@ class ClienteDashboardController extends Controller
         }
 
         $validated = $request->validate([
-            'fecha_inicio' => 'required|date|after_or_equal:today',
+            'fecha_inicio' => 'required|date|after_or_equal:'.now()->toDateString(),
             'fecha_fin' => 'required|date|after:fecha_inicio',
             'numero_huespedes' => 'required|integer|min:1',
             'servicios' => 'nullable|array',
@@ -461,11 +452,23 @@ class ClienteDashboardController extends Controller
             ->with('habitacion.tipoHabitacion')
             ->firstOrFail();
 
-        // Verificar que la reserva esté pendiente
-        if ($reserva->estado !== 'pendiente') {
-            return redirect()
-                ->route('cliente.reservas.index')
-                ->with('error', 'Esta reserva ya no está pendiente de pago');
+        // Verificar si es pago de diferencia
+        $esDiferencia = $request->query('diferencia') === 'true';
+
+        if ($esDiferencia) {
+            // Validar que la reserva esté confirmada y tenga diferencia pendiente
+            if ($reserva->estado !== 'confirmada' || $reserva->tipo_diferencia !== 'pagar' || ! $reserva->monto_diferencia || $reserva->fecha_diferencia_pagada) {
+                return redirect()
+                    ->route('cliente.reservas.index')
+                    ->with('error', 'No hay diferencia pendiente de pago para esta reserva');
+            }
+        } else {
+            // Verificar que la reserva esté pendiente
+            if ($reserva->estado !== 'pendiente') {
+                return redirect()
+                    ->route('cliente.reservas.index')
+                    ->with('error', 'Esta reserva ya no está pendiente de pago');
+            }
         }
 
         $metodosPago = \App\Models\MetodoPago::where('activo', true)->get();
@@ -473,6 +476,7 @@ class ClienteDashboardController extends Controller
         return view('cliente.pagos.create', [
             'reserva' => $reserva,
             'metodosPago' => $metodosPago,
+            'esDiferencia' => $esDiferencia,
         ]);
     }
 
@@ -481,6 +485,7 @@ class ClienteDashboardController extends Controller
         $validated = $request->validate([
             'reserva_id' => 'required|exists:reservas,id',
             'metodo_pago_id' => 'required|exists:metodo_pagos,id',
+            'es_diferencia' => 'nullable|boolean',
         ]);
 
         $usuario = Auth::user();
@@ -491,42 +496,75 @@ class ClienteDashboardController extends Controller
             ->with('habitacion')
             ->firstOrFail();
 
-        if ($reserva->estado !== 'pendiente') {
+        $esDiferencia = $validated['es_diferencia'] ?? false;
+
+        if ($esDiferencia) {
+            // Validar que sea pago de diferencia
+            if ($reserva->estado !== 'confirmada' || $reserva->tipo_diferencia !== 'pagar' || ! $reserva->monto_diferencia || $reserva->fecha_diferencia_pagada) {
+                return redirect()
+                    ->route('cliente.reservas.index')
+                    ->with('error', 'No hay diferencia pendiente de pago para esta reserva');
+            }
+
+            // Crear el pago de la diferencia EN PROCESO (para que el admin lo apruebe)
+            $pago = \App\Models\Pago::create([
+                'reserva_id' => $reserva->id,
+                'metodo_pago_id' => $validated['metodo_pago_id'],
+                'monto' => $reserva->monto_diferencia,
+                'estado' => 'en_proceso',
+                'referencia' => 'PAG-DIF-'.strtoupper(uniqid()),
+                'fecha_pago' => now(),
+                'observaciones' => 'Pago de diferencia por cambio de habitación - Pendiente de verificación',
+            ]);
+
             return redirect()
                 ->route('cliente.reservas.index')
-                ->with('error', 'Esta reserva ya no está pendiente de pago');
-        }
+                ->with('success', '¡Pago de diferencia enviado! El pago de $'.number_format($reserva->monto_diferencia, 2).' está en proceso de verificación.')
+                ->with('email_notification', [
+                    'title' => 'Pago de Diferencia Recibido',
+                    'message' => 'Se ha recibido tu pago de diferencia por $'.number_format($reserva->monto_diferencia, 2).'. Está siendo procesado y verificado.',
+                    'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                    'email' => $cliente->email,
+                ]);
+        } else {
+            // Pago normal de reserva
+            if ($reserva->estado !== 'pendiente') {
+                return redirect()
+                    ->route('cliente.reservas.index')
+                    ->with('error', 'Esta reserva ya no está pendiente de pago');
+            }
 
-        // Crear el pago
-        $pago = \App\Models\Pago::create([
-            'reserva_id' => $reserva->id,
-            'metodo_pago_id' => $validated['metodo_pago_id'],
-            'monto' => $reserva->precio_total,
-            'estado' => 'completado',
-            'referencia' => 'PAG-'.strtoupper(uniqid()),
-            'fecha_pago' => now(),
-        ]);
-
-        // Actualizar estado de la reserva usando el patrón State
-        $reserva->update([
-            'estado' => 'confirmada',
-            'fecha_confirmacion' => now(),
-        ]);
-
-        // Cambiar estado de la habitación a 'ocupada' cuando la reserva se confirma
-        $reserva->habitacion->update([
-            'estado' => 'ocupada',
-        ]);
-
-        return redirect()
-            ->route('cliente.reservas.index')
-            ->with('success', '¡Pago realizado exitosamente! Reserva confirmada.')
-            ->with('email_notification', [
-                'title' => 'Pago Recibido y Confirmado',
-                'message' => 'Se ha enviado un comprobante de pago y confirmación de tu reserva.',
-                'recipient' => $cliente->nombre.' '.$cliente->apellido,
-                'email' => $cliente->email,
+            // Crear el pago
+            $pago = \App\Models\Pago::create([
+                'reserva_id' => $reserva->id,
+                'metodo_pago_id' => $validated['metodo_pago_id'],
+                'monto' => $reserva->precio_total,
+                'estado' => 'completado',
+                'referencia' => 'PAG-'.strtoupper(uniqid()),
+                'fecha_pago' => now(),
             ]);
+
+            // Actualizar estado de la reserva usando el patrón State
+            $reserva->update([
+                'estado' => 'confirmada',
+                'fecha_confirmacion' => now(),
+            ]);
+
+            // Cambiar estado de la habitación a 'ocupada' cuando la reserva se confirma
+            $reserva->habitacion->update([
+                'estado' => 'ocupada',
+            ]);
+
+            return redirect()
+                ->route('cliente.reservas.index')
+                ->with('success', '¡Pago realizado exitosamente! Reserva confirmada.')
+                ->with('email_notification', [
+                    'title' => 'Pago Recibido y Confirmado',
+                    'message' => 'Se ha enviado un comprobante de pago y confirmación de tu reserva.',
+                    'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                    'email' => $cliente->email,
+                ]);
+        }
     }
 
     /**
@@ -560,6 +598,39 @@ class ClienteDashboardController extends Controller
             ->with('email_notification', [
                 'title' => 'Reembolso Aceptado',
                 'message' => 'Has aceptado el reembolso de $'.number_format($reserva->monto_reembolso, 2).'. El dinero será procesado en 3-5 días hábiles.',
+                'recipient' => $cliente->nombre.' '.$cliente->apellido,
+                'email' => $cliente->email,
+            ]);
+    }
+
+    /**
+     * Aceptar reembolso de diferencia cuando se cambió a una habitación más barata
+     */
+    public function aceptarReembolsoDiferencia($id)
+    {
+        $cliente = auth()->user()->cliente;
+        $reserva = Reserva::where('id', $id)
+            ->where('cliente_id', $cliente->id)
+            ->firstOrFail();
+
+        // Validar que tenga diferencia por reembolsar y no esté ya procesada
+        if ($reserva->tipo_diferencia !== 'reembolsar' || $reserva->fecha_diferencia_pagada || ! $reserva->monto_diferencia) {
+            return redirect()
+                ->route('cliente.reservas.index')
+                ->with('error', 'No se puede aceptar este reembolso. Verifique el estado de la diferencia.');
+        }
+
+        // Marcar la diferencia como procesada
+        $reserva->update([
+            'fecha_diferencia_pagada' => now(),
+        ]);
+
+        return redirect()
+            ->route('cliente.reservas.index')
+            ->with('success', 'Reembolso de diferencia aceptado. El monto de $'.number_format($reserva->monto_diferencia, 2).' será procesado en los próximos 3-5 días hábiles.')
+            ->with('email_notification', [
+                'title' => 'Reembolso de Diferencia Aceptado',
+                'message' => 'Has aceptado el reembolso de diferencia de $'.number_format($reserva->monto_diferencia, 2).' por cambio de habitación. El dinero será procesado en 3-5 días hábiles.',
                 'recipient' => $cliente->nombre.' '.$cliente->apellido,
                 'email' => $cliente->email,
             ]);

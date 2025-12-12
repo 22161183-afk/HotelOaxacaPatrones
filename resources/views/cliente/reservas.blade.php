@@ -49,7 +49,20 @@
                             <td>{{ $reserva->fecha_inicio->format('d/m/Y') }}</td>
                             <td>{{ $reserva->fecha_fin->format('d/m/Y') }}</td>
                             <td>{{ abs($reserva->calcularNoches()) }}</td>
-                            <td><strong>${{ number_format($reserva->precio_total, 2) }}</strong></td>
+                            <td>
+                                <strong>${{ number_format($reserva->precio_total, 2) }}</strong>
+                                <small class="d-block text-muted">IVA incluido</small>
+
+                                @if($reserva->monto_diferencia && $reserva->tipo_diferencia === 'pagar' && !$reserva->fecha_diferencia_pagada)
+                                    <span class="badge bg-warning mt-1">
+                                        <i class="fas fa-exclamation-circle"></i> Diferencia pendiente: ${{ number_format($reserva->monto_diferencia, 2) }}
+                                    </span>
+                                @elseif($reserva->monto_diferencia && $reserva->tipo_diferencia === 'reembolsar' && !$reserva->fecha_diferencia_pagada)
+                                    <span class="badge bg-info mt-1">
+                                        <i class="fas fa-undo"></i> Reembolso pendiente: ${{ number_format($reserva->monto_diferencia, 2) }}
+                                    </span>
+                                @endif
+                            </td>
                             <td>
                                 @if($reserva->estado === 'confirmada')
                                     <span class="badge bg-success">Confirmada</span>
@@ -63,9 +76,9 @@
                                     <span class="badge bg-secondary">{{ $reserva->estado_formateado }}</span>
                                 @endif
                             </td>
-                            <td>
+                            <td style="min-width: 150px;">
                                 @if($reserva->estado === 'pendiente')
-                                    <div class="btn-group-vertical gap-1" role="group">
+                                    <div class="d-flex flex-column gap-1">
                                         <a href="{{ route('cliente.reservas.edit', $reserva->id) }}" class="btn btn-sm btn-primary">
                                             <i class="fas fa-edit"></i> Editar
                                         </a>
@@ -81,15 +94,38 @@
                                         </form>
                                     </div>
                                 @elseif($reserva->estado === 'confirmada')
-                                    <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
+                                    @if($reserva->monto_diferencia && $reserva->tipo_diferencia === 'pagar' && !$reserva->fecha_diferencia_pagada)
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
+                                            <a href="{{ route('cliente.pagos.create', ['reserva_id' => $reserva->id, 'diferencia' => true]) }}"
+                                               class="btn btn-sm btn-warning text-nowrap">
+                                                <i class="fas fa-dollar-sign"></i> Pagar
+                                            </a>
+                                            <small class="text-muted text-center">${{ number_format($reserva->monto_diferencia, 2) }}</small>
+                                        </div>
+                                    @elseif($reserva->monto_diferencia && $reserva->tipo_diferencia === 'reembolsar' && !$reserva->fecha_diferencia_pagada)
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
+                                            <form action="{{ route('cliente.reservas.aceptar-reembolso-diferencia', $reserva->id) }}" method="POST">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-info w-100 text-nowrap"
+                                                        onclick="return confirm('¿Aceptar reembolso de ${{ number_format($reserva->monto_diferencia, 2) }}? El dinero se procesará en 3-5 días hábiles.')">
+                                                    <i class="fas fa-undo"></i> Aceptar
+                                                </button>
+                                            </form>
+                                            <small class="text-muted text-center">${{ number_format($reserva->monto_diferencia, 2) }}</small>
+                                        </div>
+                                    @else
+                                        <span class="badge bg-success"><i class="fas fa-check-circle"></i> Pagada</span>
+                                    @endif
                                 @elseif($reserva->estado === 'cancelada')
                                     <span class="badge bg-danger"><i class="fas fa-ban"></i> Cancelada</span>
                                 @elseif($reserva->estado === 'en_proceso_reembolso')
                                     <form action="{{ route('cliente.reservas.aceptar-reembolso', $reserva->id) }}" method="POST">
                                         @csrf
-                                        <button type="submit" class="btn btn-sm btn-primary"
+                                        <button type="submit" class="btn btn-sm btn-primary text-nowrap"
                                                 onclick="return confirm('¿Aceptar reembolso de ${{ number_format($reserva->monto_reembolso, 2) }}? El dinero se procesará en 3-5 días hábiles.')">
-                                            <i class="fas fa-check"></i> Aceptar Reembolso
+                                            <i class="fas fa-check"></i> Aceptar
                                         </button>
                                     </form>
                                 @elseif($reserva->estado === 'reembolsado')
@@ -145,13 +181,31 @@
         <div class="card">
             <div class="card-body">
                 <h6 class="card-title"><i class="fas fa-info-circle text-primary"></i> Estados de Reserva</h6>
-                <ul class="small mb-0">
-                    <li><span class="badge bg-warning">Pendiente</span> - Reserva creada, pendiente de pago</li>
-                    <li><span class="badge bg-success">Confirmada</span> - Pago recibido, reserva confirmada</li>
-                    <li><span class="badge bg-info">Completada</span> - Estancia finalizada</li>
-                    <li><span class="badge bg-danger"><i class="fas fa-ban"></i> Cancelada</span> - Reserva cancelada</li>
-                    <li><span class="badge bg-secondary"><i class="fas fa-exclamation-triangle"></i> En Proceso de Reembolso</span> - Cancelada por admin, pendiente de aceptar reembolso</li>
-                    <li><span class="badge bg-info"><i class="fas fa-undo"></i> Reembolsado</span> - Reembolso aceptado, en proceso de devolución</li>
+                <ul class="list-unstyled small mb-0">
+                    <li class="mb-2">
+                        <span class="badge bg-warning text-dark">Pendiente</span>
+                        <span class="ms-2">Reserva creada, pendiente de pago</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-success">Confirmada</span>
+                        <span class="ms-2">Pago recibido, reserva confirmada</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-info">Completada</span>
+                        <span class="ms-2">Estancia finalizada</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-danger">Cancelada</span>
+                        <span class="ms-2">Reserva cancelada</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-secondary">En Proceso de Reembolso</span>
+                        <span class="ms-2">Cancelada por admin, pendiente de aceptar reembolso</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-info">Reembolsado</span>
+                        <span class="ms-2">Reembolso aceptado, en proceso de devolución</span>
+                    </li>
                 </ul>
             </div>
         </div>

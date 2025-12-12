@@ -45,6 +45,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
         Route::post('/{id}/confirmar', [AdminDashboardController::class, 'confirmarReservaCommand'])->name('confirmar');
         Route::post('/{id}/cancelar', [AdminDashboardController::class, 'cancelarReservaCommand'])->name('cancelar');
         Route::post('/{id}/cambiar-habitacion', [AdminDashboardController::class, 'cambiarHabitacionCommand'])->name('cambiar-habitacion');
+        Route::post('/{id}/cancelar-diferencia', [AdminDashboardController::class, 'cancelarDiferencia'])->name('cancelar-diferencia');
     });
 
     Route::prefix('habitaciones')->name('habitaciones.')->group(function () {
@@ -59,6 +60,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     Route::prefix('pagos')->name('pagos.')->group(function () {
         Route::get('/', [AdminDashboardController::class, 'pagos'])->name('index');
+        Route::post('/{id}/aprobar-diferencia', [AdminDashboardController::class, 'aprobarPagoDiferencia'])->name('aprobar-diferencia');
     });
 
     Route::prefix('metodos-pago')->name('metodos-pago.')->group(function () {
@@ -89,6 +91,7 @@ Route::middleware(['auth', 'role:cliente'])->prefix('cliente')->name('cliente.')
         Route::put('/{id}', [ClienteDashboardController::class, 'updateReserva'])->name('update');
         Route::put('/{id}/cancelar', [ClienteDashboardController::class, 'cancelarReserva'])->name('cancelar');
         Route::post('/{id}/aceptar-reembolso', [ClienteDashboardController::class, 'aceptarReembolso'])->name('aceptar-reembolso');
+        Route::post('/{id}/aceptar-reembolso-diferencia', [ClienteDashboardController::class, 'aceptarReembolsoDiferencia'])->name('aceptar-reembolso-diferencia');
     });
 
     Route::prefix('habitaciones')->name('habitaciones.')->group(function () {

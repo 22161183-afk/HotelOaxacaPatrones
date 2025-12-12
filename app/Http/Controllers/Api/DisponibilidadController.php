@@ -22,7 +22,7 @@ class DisponibilidadController extends Controller
     {
         $request->validate([
             'habitacion_id' => 'required|exists:habitacions,id',
-            'fecha_inicio' => 'required|date|after_or_equal:today',
+            'fecha_inicio' => 'required|date|after_or_equal:'.now()->toDateString(),
             'fecha_fin' => 'required|date|after:fecha_inicio',
         ]);
 
@@ -73,7 +73,7 @@ class DisponibilidadController extends Controller
     public function search(Request $request)
     {
         $request->validate([
-            'fecha_inicio' => 'required|date|after_or_equal:today',
+            'fecha_inicio' => 'required|date|after_or_equal:'.now()->toDateString(),
             'fecha_fin' => 'required|date|after:fecha_inicio',
             'tipo_habitacion_id' => 'nullable|exists:tipo_habitacions,id',
             'capacidad_minima' => 'nullable|integer|min:1',
