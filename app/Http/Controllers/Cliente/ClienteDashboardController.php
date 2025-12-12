@@ -424,6 +424,14 @@ class ClienteDashboardController extends Controller
             'estado' => 'disponible',
         ]);
 
+        // Marcar pagos asociados como reembolsados
+        $reserva->pagos()
+            ->where('estado', 'completado')
+            ->update([
+                'estado' => 'reembolsado',
+                'observaciones' => 'Reembolsado por cancelación de reserva',
+            ]);
+
         return redirect()
             ->route('cliente.reservas.index')
             ->with('success', 'Reserva cancelada exitosamente')
@@ -537,6 +545,14 @@ class ClienteDashboardController extends Controller
             'estado' => 'reembolsado',
             'fecha_reembolso' => now(),
         ]);
+
+        // Marcar todos los pagos completados como reembolsados
+        $reserva->pagos()
+            ->where('estado', 'completado')
+            ->update([
+                'estado' => 'reembolsado',
+                'observaciones' => 'Reembolsado - Cliente aceptó el reembolso el '.now()->format('d/m/Y H:i'),
+            ]);
 
         return redirect()
             ->route('cliente.reservas.index')

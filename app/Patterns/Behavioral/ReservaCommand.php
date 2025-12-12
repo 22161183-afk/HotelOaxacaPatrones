@@ -150,11 +150,18 @@ class CambiarHabitacionCommand implements ReservaCommand
     {
         $this->habitacionAnteriorId = $this->reserva->habitacion_id;
 
-        // Liberar habitación anterior
-        $this->reserva->habitacion->update(['estado' => 'disponible']);
+        // Obtener habitación anterior antes de cambiar
+        $habitacionAnterior = $this->reserva->habitacion;
 
-        // Actualizar reserva
+        // Actualizar reserva con nueva habitación
         $this->reserva->update(['habitacion_id' => $this->nuevaHabitacionId]);
+
+        // Refrescar la relación para obtener la nueva habitación
+        $this->reserva->refresh();
+        $this->reserva->load('habitacion');
+
+        // Liberar habitación anterior
+        $habitacionAnterior->update(['estado' => 'disponible']);
 
         // Ocupar nueva habitación
         $this->reserva->habitacion->update(['estado' => 'ocupada']);
